@@ -1,6 +1,6 @@
 [project]
 name = "license-radar"
-version = "0.1.0"
+version = "0.1.1"
 description = "Scan project dependency manifests for license compliance risk (GPL/AGPL/LGPL exposure) before it becomes a legal problem."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,6 +12,11 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Topic :: Software Development :: Quality Assurance",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Hiro-012/license-radar"
+Repository = "https://github.com/Hiro-012/license-radar"
+Issues = "https://github.com/Hiro-012/license-radar/issues"
 
 [project.scripts]
 license-radar = "license_radar.cli:main"
