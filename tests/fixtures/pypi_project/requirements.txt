@@ -1,0 +1,16 @@
+# sample manifest mixing real permissive/weak/strong-copyleft packages
+# with synthetic fixtures for tiers that are hard to source responsibly
+# from a real, unambiguous package.
+requests==2.31.0
+flask>=2.0
+numpy
+pytest
+pyyaml
+certifi
+psycopg2
+pyqt5
+unlisted-package-not-in-db
+test-strong-copyleft-pkg
+test-weak-copyleft-pkg
+test-permissive-pkg
+test-proprietary-pkg

@@ -1,0 +1,14 @@
+{
+  "name": "sample-app",
+  "dependencies": {
+    "react": "^18.0.0",
+    "lodash": "^4.17.21",
+    "axios": "^1.6.0",
+    "test-strong-copyleft-pkg": "^1.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0",
+    "unlisted-dev-package": "^0.1.0"
+  }
+}
