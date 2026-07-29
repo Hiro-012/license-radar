@@ -23,6 +23,14 @@ GROUND_TRUTH = {
     ("pypi", "psycopg2"): ("weak-copyleft", False),
     ("pypi", "pyqt5"): ("strong-copyleft", True),
     ("pypi", "tqdm"): ("weak-copyleft", False),
+    # Real copyleft packages resolved from live registry queries (not memory):
+    # pylint = GPL-2.0-or-later, orjson = "MPL-2.0 AND (Apache-2.0 OR MIT)"
+    # (AND -> the more restrictive MPL-2.0 tier applies), paramiko = LGPL-2.1.
+    # They add real GPL/MPL/LGPL cases so accuracy is measured against
+    # real-world contamination, not only synthetic fixtures.
+    ("pypi", "pylint"): ("strong-copyleft", True),
+    ("pypi", "orjson"): ("weak-copyleft", False),
+    ("pypi", "paramiko"): ("weak-copyleft", False),
     ("pypi", "unlisted-package-not-in-db"): ("unknown", True),
     ("pypi", "test-strong-copyleft-pkg"): ("strong-copyleft", True),
     ("pypi", "test-weak-copyleft-pkg"): ("weak-copyleft", False),
@@ -140,15 +148,15 @@ def test_local_db_coverage_on_fixture_set():
     """What fraction of fixture packages resolve to a known license without --online.
 
     This is the honest limitation metric: the static DB is a small
-    curated table (~40 packages), not a full registry mirror. Packages
+    curated table (~220 packages), not a full registry mirror. Packages
     outside it report as 'unknown' unless --online is used.
     """
     findings, _ = _run_scan()
     known = sum(1 for f in findings if f.license is not None)
     coverage = known / len(findings)
-    # 20 of 22 fixture packages resolve to a license string in the static
+    # 23 of 25 fixture packages resolve to a license string in the static
     # DB by construction (test-proprietary-pkg has a non-SPDX license
     # string but is still "known"); only the two deliberately
     # unlisted-* packages are missing. This documents that ratio rather
     # than aspiring to 100%.
-    assert coverage == 20 / 22
+    assert coverage == 23 / 25

@@ -11,7 +11,7 @@ def test_parse_requirements_txt():
     assert "requests" in names
     assert "flask" in names
     assert "pyqt5" in names
-    assert len(names) == 14
+    assert len(names) == 17
 
 
 def test_parse_requirements_follows_r_includes():

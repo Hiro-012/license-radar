@@ -101,10 +101,18 @@ Licenses are normalized to an SPDX id and bucketed into four tiers:
 ## Limitations
 
 The offline database (`license_radar/license_db.py`) is a hand-curated table
-of ~150 common PyPI/npm packages (each entry verified against the live
+of ~220 common PyPI/npm packages (each entry verified against the live
 registry JSON API), not a registry mirror — use `--online` for full coverage
 against live PyPI/npm metadata (adds a network dependency and is not covered
 by the deterministic test suite).
+
+Because the offline table is keyed by package name only, a package whose
+license changed across its version history cannot be pinned to a single
+correct value. Such packages are deliberately left out of the table and
+reported as `unknown` (flagged for review) rather than guessed — for example
+`chardet`, which is LGPL-2.1-or-later up to 5.2.0 but relicensed to 0BSD in
+its 6.x/7.x line. Use `--online` with a pinned version, or check the specific
+version you depend on, when a dependency is reported this way.
 
 ## License
 

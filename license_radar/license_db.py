@@ -43,7 +43,14 @@ PYPI_LICENSES = {
     "pyqt5": "GPL-3.0-only",
     "psycopg2": "LGPL-3.0-only",
     "paramiko": "LGPL-2.1-only",
-    "chardet": "LGPL-2.1-only",
+    # NOTE: "chardet" is intentionally omitted. Its license is
+    # version-dependent: <=5.2.0 is LGPL-2.1-or-later (weak-copyleft) but the
+    # 6.x/7.x line relicensed to 0BSD (permissive), verified 2026-07-29 against
+    # the live PyPI JSON API (chardet 7.4.3 -> license_expression "0BSD",
+    # chardet 5.2.0 -> classifier "LGPLv2+"). A single name-keyed entry would
+    # give a wrong answer for one version class, so per this table's
+    # "skip ambiguous, don't guess" convention it is left out and reported as
+    # "unknown" (flagged for manual review) rather than asserted.
     # Below: verified 2026-07-25 against the live PyPI JSON API
     # (license_expression / classifiers / license field, in that priority
     # order). Compound expressions ("A AND B", "A OR B") are collapsed to
@@ -100,6 +107,45 @@ PYPI_LICENSES = {
     "filelock": "MIT",
     "distlib": "PSF-2.0",
     "protobuf": "BSD-3-Clause",  # registry text: "3-Clause BSD License"
+    # Below: verified 2026-07-28 against the live PyPI JSON API
+    # (license_expression / classifiers / license field, same priority and
+    # compound-expression rules as the 2026-07-25 batch above).
+    "scikit-learn": "BSD-3-Clause",
+    "plotly": "MIT",
+    "alembic": "MIT",
+    "marshmallow": "MIT",
+    "tabulate": "MIT",
+    "arrow": "Apache-2.0",  # classifier "Apache Software License"
+    "gitpython": "BSD-3-Clause",
+    "openpyxl": "MIT",
+    "pyparsing": "MIT",
+    "more-itertools": "MIT",
+    "cachetools": "MIT",
+    "multidict": "Apache-2.0",  # license field "Apache License 2.0"
+    "orjson": "MPL-2.0",  # "MPL-2.0 AND (Apache-2.0 OR MIT)"; MPL term applies
+    "msgpack": "Apache-2.0",
+    "joblib": "BSD-3-Clause",
+    "networkx": "BSD-3-Clause",
+    "coverage": "Apache-2.0",
+    "tox": "MIT",
+    "flake8": "MIT",
+    "pylint": "GPL-2.0-or-later",
+    "isort": "MIT",
+    "jsonschema": "MIT",
+    "typer": "MIT",
+    "dnspython": "ISC",
+    "pynacl": "Apache-2.0",
+    "sentry-sdk": "MIT",
+    "loguru": "MIT",
+    "tenacity": "Apache-2.0",  # classifier "Apache Software License"
+    "apscheduler": "MIT",
+    "sphinx": "BSD-2-Clause",
+    "jmespath": "MIT",
+    "s3transfer": "Apache-2.0",
+    "prometheus-client": "Apache-2.0",  # "Apache-2.0 AND BSD-2-Clause"
+    "structlog": "MIT",  # "MIT OR Apache-2.0"; permissive alternative
+    "watchfiles": "MIT",
+    "httptools": "MIT",
     # synthetic fixtures (not a claim about any real package)
     "test-strong-copyleft-pkg": "AGPL-3.0-only",
     "test-weak-copyleft-pkg": "MPL-2.0",
@@ -173,6 +219,48 @@ NPM_LICENSES = {
     "postcss": "MIT",
     "autoprefixer": "MIT",
     "sass": "MIT",
+    # Below: verified 2026-07-28 against the live npm registry API
+    # (registry.npmjs.org/<pkg> "license" field, already SPDX).
+    "react-dom": "MIT",
+    "react-router-dom": "MIT",
+    "ts-node": "MIT",
+    "concurrently": "MIT",
+    "cross-env": "MIT",
+    "rimraf": "BlueOak-1.0.0",
+    "fs-extra": "MIT",
+    "chokidar": "MIT",
+    "debug": "MIT",
+    "ms": "MIT",
+    "qs": "BSD-3-Clause",
+    "node-fetch": "MIT",
+    "form-data": "MIT",
+    "tslib": "0BSD",
+    "esbuild": "MIT",
+    "vitest": "MIT",
+    "playwright": "Apache-2.0",
+    "puppeteer": "Apache-2.0",
+    "cypress": "MIT",
+    "supertest": "MIT",
+    "dayjs": "MIT",
+    "date-fns": "MIT",
+    "luxon": "MIT",
+    "nanoid": "MIT",
+    "jsonwebtoken": "MIT",
+    "cookie": "MIT",
+    "mongoose": "MIT",
+    "sequelize": "MIT",
+    "pg": "MIT",
+    "knex": "MIT",
+    "winston": "MIT",
+    "pino": "MIT",
+    "yup": "MIT",
+    "ajv": "MIT",
+    "reflect-metadata": "Apache-2.0",
+    "zustand": "MIT",
+    "react-hook-form": "MIT",
+    "three": "MIT",
+    "d3": "ISC",
+    "nodemailer": "MIT-0",
     # synthetic fixtures (not a claim about any real package)
     "test-strong-copyleft-pkg": "GPL-3.0-only",
     "test-weak-copyleft-pkg": "LGPL-3.0-only",

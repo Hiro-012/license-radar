@@ -10,6 +10,9 @@ certifi
 psycopg2
 pyqt5
 tqdm
+pylint
+orjson
+paramiko
 unlisted-package-not-in-db
 test-strong-copyleft-pkg
 test-weak-copyleft-pkg

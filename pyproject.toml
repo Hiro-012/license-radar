@@ -1,6 +1,10 @@
 [project]
 name = "license-radar"
+
+version = "0.1.10"
+
 version = "0.1.9"
+
 description = "Scan project dependency manifests for license compliance risk (GPL/AGPL/LGPL exposure) before it becomes a legal problem."
 readme = "README.md"
 requires-python = ">=3.11"
