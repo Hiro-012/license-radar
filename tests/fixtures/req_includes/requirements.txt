@@ -1,0 +1,4 @@
+# Thin top-level manifest that defers to shared includes.
+flask
+-r base.txt
+--requirement extra.txt

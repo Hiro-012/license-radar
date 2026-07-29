@@ -22,6 +22,7 @@ GROUND_TRUTH = {
     ("pypi", "certifi"): ("weak-copyleft", False),
     ("pypi", "psycopg2"): ("weak-copyleft", False),
     ("pypi", "pyqt5"): ("strong-copyleft", True),
+    ("pypi", "tqdm"): ("weak-copyleft", False),
     ("pypi", "unlisted-package-not-in-db"): ("unknown", True),
     ("pypi", "test-strong-copyleft-pkg"): ("strong-copyleft", True),
     ("pypi", "test-weak-copyleft-pkg"): ("weak-copyleft", False),
@@ -30,6 +31,7 @@ GROUND_TRUTH = {
     ("npm", "react"): ("permissive", False),
     ("npm", "lodash"): ("permissive", False),
     ("npm", "axios"): ("permissive", False),
+    ("npm", "pm2"): ("strong-copyleft", True),
     ("npm", "test-strong-copyleft-pkg"): ("strong-copyleft", True),
     ("npm", "eslint"): ("permissive", False),
     ("npm", "typescript"): ("permissive", False),
@@ -85,6 +87,55 @@ def test_policy_violation_precision_and_recall():
     assert recall == 1.0, f"recall was {recall:.2%} (fn={fn})"
 
 
+def test_strong_copyleft_in_setup_cfg_is_flagged_end_to_end():
+    """A strong-copyleft dep declared only in setup.cfg must be caught.
+
+    This exercises the full path (discover -> parse setup.cfg -> classify ->
+    policy) for the legacy manifest format, separate from the precision/recall
+    corpus above so those metrics stay pinned to their fixtures.
+    """
+    policy = load_policy(None)
+    findings = scan_manifest(FIXTURES / "setupcfg_project" / "setup.cfg")
+    by_pkg = {f.package: f for f in findings}
+    assert set(by_pkg) == {"requests", "pyqt5"}
+    assert by_pkg["pyqt5"].tier == "strong-copyleft"
+    assert violates(by_pkg["pyqt5"], policy) is True
+    assert violates(by_pkg["requests"], policy) is False
+
+
+def test_strong_copyleft_via_requirements_include_is_flagged_end_to_end():
+    """A strong-copyleft dep reachable only through a ``-r`` include must be caught.
+
+    Exercises the full path (parse requirements.txt -> follow ``-r base.txt`` ->
+    classify -> policy) for pip's include mechanism, kept out of the
+    precision/recall corpus so those metrics stay pinned to their fixtures.
+    """
+    policy = load_policy(None)
+    findings = scan_manifest(FIXTURES / "req_includes" / "requirements.txt")
+    by_pkg = {f.package: f for f in findings}
+    # pyqt5 lives only in base.txt, pulled in via -r.
+    assert "pyqt5" in by_pkg
+    assert by_pkg["pyqt5"].tier == "strong-copyleft"
+    assert violates(by_pkg["pyqt5"], policy) is True
+    assert violates(by_pkg["flask"], policy) is False
+
+
+def test_strong_copyleft_in_pipfile_is_flagged_end_to_end():
+    """A strong-copyleft dep declared only in a Pipfile must be caught.
+
+    Exercises the full path (discover -> parse Pipfile -> classify -> policy)
+    for the Pipenv manifest format, kept out of the precision/recall corpus so
+    those metrics stay pinned to their fixtures.
+    """
+    policy = load_policy(None)
+    findings = scan_manifest(FIXTURES / "pipfile_project" / "Pipfile")
+    by_pkg = {f.package: f for f in findings}
+    assert set(by_pkg) == {"requests", "pyqt5"}
+    assert by_pkg["pyqt5"].tier == "strong-copyleft"
+    assert violates(by_pkg["pyqt5"], policy) is True
+    assert violates(by_pkg["requests"], policy) is False
+
+
 def test_local_db_coverage_on_fixture_set():
     """What fraction of fixture packages resolve to a known license without --online.
 
@@ -95,9 +146,9 @@ def test_local_db_coverage_on_fixture_set():
     findings, _ = _run_scan()
     known = sum(1 for f in findings if f.license is not None)
     coverage = known / len(findings)
-    # 18 of 20 fixture packages resolve to a license string in the static
+    # 20 of 22 fixture packages resolve to a license string in the static
     # DB by construction (test-proprietary-pkg has a non-SPDX license
     # string but is still "known"); only the two deliberately
     # unlisted-* packages are missing. This documents that ratio rather
     # than aspiring to 100%.
-    assert coverage == 18 / 20
+    assert coverage == 20 / 22

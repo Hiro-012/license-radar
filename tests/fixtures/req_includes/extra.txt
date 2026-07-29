@@ -1,0 +1,2 @@
+-r base.txt   # already-seen include: must be skipped (cycle guard)
+numpy

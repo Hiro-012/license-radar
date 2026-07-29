@@ -4,6 +4,7 @@
     "react": "^18.0.0",
     "lodash": "^4.17.21",
     "axios": "^1.6.0",
+    "pm2": "^5.3.0",
     "test-strong-copyleft-pkg": "^1.0.0"
   },
   "devDependencies": {

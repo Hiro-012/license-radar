@@ -1,8 +1,9 @@
 """Classify an SPDX license identifier into a compliance risk tier."""
 
 PERMISSIVE = {
-    "MIT", "ISC", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "HPND",
-    "Python-2.0", "Unlicense", "0BSD", "Zlib", "BSL-1.0",
+    "MIT", "MIT-0", "ISC", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0",
+    "HPND", "Python-2.0", "PSF-2.0", "Unlicense", "0BSD", "Zlib", "BSL-1.0",
+    "BlueOak-1.0.0",
 }
 
 WEAK_COPYLEFT = {

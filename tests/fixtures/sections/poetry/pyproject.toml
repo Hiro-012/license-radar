@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "poetry-app"
+version = "0.0.0"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+requests = "^2.31"
+flask = "^3.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+black = "^24.0"
+
+[tool.poetry.group.docs.dependencies]
+sphinx = "^7.0"

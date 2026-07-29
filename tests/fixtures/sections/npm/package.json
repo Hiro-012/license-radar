@@ -1,0 +1,16 @@
+{
+  "name": "sections-app",
+  "version": "0.0.0",
+  "dependencies": {
+    "react": "^18.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  },
+  "optionalDependencies": {
+    "fsevents": "^2.3.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

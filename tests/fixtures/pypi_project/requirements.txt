@@ -9,6 +9,7 @@ pyyaml
 certifi
 psycopg2
 pyqt5
+tqdm
 unlisted-package-not-in-db
 test-strong-copyleft-pkg
 test-weak-copyleft-pkg

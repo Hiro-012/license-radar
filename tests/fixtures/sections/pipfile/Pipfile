@@ -1,0 +1,17 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+requests = "*"
+flask = ">=3.0"
+# A table-style entry (version + extras) still declares the package by its key.
+gunicorn = {version = "*", extras = ["gevent"]}
+
+[dev-packages]
+pytest = "*"
+sphinx = ">=7.0"
+
+[requires]
+python_version = "3.11"

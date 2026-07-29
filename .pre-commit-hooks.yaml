@@ -1,0 +1,7 @@
+- id: license-radar
+  name: license-radar (dependency license compliance)
+  description: Scan dependency manifests for GPL/AGPL/LGPL copyleft license risk before it becomes a legal problem.
+  entry: license-radar scan .
+  language: python
+  files: '(^|/)(requirements.*\.txt|pyproject\.toml|setup\.cfg|Pipfile|package\.json)$'
+  pass_filenames: false
