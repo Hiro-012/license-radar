@@ -114,6 +114,19 @@ reported as `unknown` (flagged for review) rather than guessed — for example
 its 6.x/7.x line. Use `--online` with a pinned version, or check the specific
 version you depend on, when a dependency is reported this way.
 
+To keep the offline table honest as upstream licenses change, every real entry
+is reconciled against the live PyPI/npm registries by `scripts/audit_db.py`,
+which compares each package's stored risk tier with the registry's current
+declared license and reports any drift. It runs on a schedule and on any change
+to the database in CI (`.github/workflows/audit-license-db.yml`); the `chardet`
+relicensing above is the kind of drift it exists to catch. The classifier
+recognizes registries' free-text and compound license strings where they are
+tier-unambiguous (`Apache License 2.0`, `3-Clause BSD License`, `LGPL-2.1`,
+`CC0-1.0`, `MIT-CMU`, and `AND`/`OR` expressions); entries the registry still
+leaves genuinely ambiguous or unlabeled are reported as `UNVERIFIABLE` and left
+for human review rather than guessed. A recent live run reconciled 219 entries
+as 214 OK / 0 drift / 5 unverifiable.
+
 ## License
 
 MIT

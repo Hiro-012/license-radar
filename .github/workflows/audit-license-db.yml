@@ -1,0 +1,36 @@
+name: Audit license DB against live registries
+
+# The offline license DB (license_radar/license_db.py) is name-keyed and can go
+# stale when a package is relicensed upstream (this happened with chardet:
+# LGPL-2.1 -> 0BSD). This job re-reconciles every real entry against the live
+# PyPI / npm registries on a schedule so that drift is surfaced mechanically
+# instead of only during a manual audit. It never publishes or mutates anything.
+
+on:
+  schedule:
+    # Weekly, Mondays 07:00 UTC.
+    - cron: '0 7 * * 1'
+  workflow_dispatch: {}
+  # Also run when the DB itself changes, so a bad hand-edit is caught in PR CI.
+  pull_request:
+    paths:
+      - 'license_radar/license_db.py'
+      - 'license_radar/classify.py'
+      - 'scripts/audit_db.py'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # audit_db.py uses only the standard library; no install needed.
+      - name: Reconcile offline DB tiers with live registries
+        run: python scripts/audit_db.py
