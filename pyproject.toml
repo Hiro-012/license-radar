@@ -1,7 +1,7 @@
 [project]
 name = "license-radar"
 
-version = "0.1.14"
+version = "0.1.15"
 
 description = "Scan project dependency manifests for license compliance risk (GPL/AGPL/LGPL exposure) before it becomes a legal problem."
 readme = "README.md"

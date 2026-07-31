@@ -62,6 +62,19 @@ def test_pyproject_poetry_includes_group_dependencies():
     assert set(names) == {"requests", "flask", "pytest", "black", "sphinx"}
 
 
+def test_pyproject_poetry_includes_legacy_dev_dependencies():
+    # Poetry < 1.2 declares dev deps in a flat [tool.poetry.dev-dependencies]
+    # table (not the group syntax). Many un-migrated projects still use it; a
+    # copyleft dev dependency there (python-levenshtein is GPL) was previously
+    # missed entirely. `python` is excluded as it is the runtime.
+    ecosystem, names = parse_manifest(
+        FIXTURES / "sections" / "poetry-legacy" / "pyproject.toml"
+    )
+    assert ecosystem == "pypi"
+    assert "python" not in names
+    assert set(names) == {"requests", "pytest", "python-levenshtein"}
+
+
 def test_package_json_includes_optional_and_peer_dependencies():
     ecosystem, names = parse_manifest(FIXTURES / "sections" / "npm" / "package.json")
     assert ecosystem == "npm"

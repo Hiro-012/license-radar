@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "poetry-legacy-app"
+version = "0.0.0"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+requests = "^2.31"
+
+# Poetry < 1.2 flat dev-dependencies table (pre-group syntax). Still used by
+# many un-migrated projects. A copyleft dep declared here must be scanned.
+[tool.poetry.dev-dependencies]
+pytest = "^8.0"
+python-levenshtein = "^0.12"

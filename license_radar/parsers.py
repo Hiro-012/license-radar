@@ -145,6 +145,14 @@ def parse_pyproject_toml(path: Path) -> list[str]:
         if name.lower() != "python":
             names.append(name)
 
+    # Legacy Poetry (< 1.2) dev dependencies: [tool.poetry.dev-dependencies].
+    # This flat table predates the group syntax below and is still used by many
+    # existing projects that have not migrated. A copyleft dependency declared
+    # here (e.g. a GPL test helper) would otherwise be silently skipped.
+    for name in poetry.get("dev-dependencies", {}):
+        if name.lower() != "python":
+            names.append(name)
+
     # Poetry 1.2+ dependency groups: [tool.poetry.group.<name>.dependencies].
     # Dev/test/docs dependencies moved here from the legacy dev-dependencies
     # table and were previously missed entirely.

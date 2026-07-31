@@ -42,8 +42,9 @@ manifests bundled inside its dependencies.
 
 Within each manifest, every section that declares the project's own
 dependencies is scanned — not just the primary one. For `pyproject.toml` that
-includes PEP 621 `[project.optional-dependencies]` extras and Poetry
-`[tool.poetry.group.*.dependencies]` groups; for legacy `setup.cfg` it includes
+includes PEP 621 `[project.optional-dependencies]` extras, Poetry
+`[tool.poetry.group.*.dependencies]` groups, and the legacy Poetry (< 1.2)
+`[tool.poetry.dev-dependencies]` table; for legacy `setup.cfg` it includes
 `[options] install_requires` and `[options.extras_require]`; for Pipenv
 `Pipfile` it includes `[packages]` and `[dev-packages]`; for `package.json`
 it includes `optionalDependencies` and `peerDependencies`. A copyleft
