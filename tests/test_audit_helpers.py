@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from audit_db import (  # noqa: E402
+    pypi_tier_hint,
     registry_tier,
     spdx_from_npm_payload,
     spdx_from_pypi_payload,
@@ -56,6 +57,19 @@ class TestPyPIPayload:
             "classifiers": ["License :: OSI Approved :: BSD License"],
         }
         assert spdx_from_pypi_payload(info) is None
+
+    def test_maps_psf_classifier_to_single_id(self):
+        # matplotlib declares only this classifier (its `license` field is the
+        # full license text). PSF-2.0 is a single, tier-unambiguous id, so it
+        # is safe to map -- unlike a bare "BSD License".
+        info = {
+            "license_expression": "",
+            "license": "License agreement for matplotlib ... (full text)",
+            "classifiers": [
+                "License :: OSI Approved :: Python Software Foundation License",
+            ],
+        }
+        assert spdx_from_pypi_payload(info) == "PSF-2.0"
 
     def test_falls_back_to_short_free_text(self):
         info = {"license_expression": "", "license": "MIT", "classifiers": []}
@@ -182,3 +196,42 @@ class TestRegistryTier:
     def test_still_unverifiable_when_truly_ambiguous(self):
         assert registry_tier("LGPL with exceptions") == TIER_UNKNOWN
         assert registry_tier(None) == TIER_UNKNOWN
+
+
+class TestPyPITierHint:
+    """The tier-level fallback for id-ambiguous but tier-unambiguous OSI
+    classifiers (e.g. a bare "BSD License"). It must pin a tier without ever
+    fabricating a clause count, and must not fire on anything else."""
+
+    def test_bare_bsd_classifier_is_permissive(self):
+        info = {"classifiers": ["License :: OSI Approved :: BSD License"]}
+        tier, tail = pypi_tier_hint(info)
+        assert tier == TIER_PERMISSIVE
+        assert tail == "BSD License"
+
+    def test_no_matching_classifier_is_unknown(self):
+        # An id we already resolve elsewhere must NOT be swallowed here; the
+        # hint is a last resort, so it only fires for the family classifiers.
+        info = {"classifiers": ["License :: OSI Approved :: MIT License"]}
+        assert pypi_tier_hint(info) == (TIER_UNKNOWN, None)
+
+    def test_no_license_classifier_is_unknown(self):
+        info = {"classifiers": ["Programming Language :: Python :: 3"]}
+        assert pypi_tier_hint(info) == (TIER_UNKNOWN, None)
+
+    def test_empty_payload_is_unknown(self):
+        assert pypi_tier_hint({}) == (TIER_UNKNOWN, None)
+
+    def test_hint_does_not_override_concrete_spdx(self):
+        # A package with both a concrete id AND a bare BSD classifier must be
+        # resolved by the concrete id path (spdx_from_pypi_payload), so the
+        # audit only consults the hint when that path yields UNKNOWN.
+        info = {
+            "license_expression": "",
+            "license": "",
+            "classifiers": [
+                "License :: OSI Approved :: MIT License",
+                "License :: OSI Approved :: BSD License",
+            ],
+        }
+        assert spdx_from_pypi_payload(info) == "MIT"

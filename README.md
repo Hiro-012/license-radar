@@ -101,7 +101,7 @@ Licenses are normalized to an SPDX id and bucketed into four tiers:
 ## Limitations
 
 The offline database (`license_radar/license_db.py`) is a hand-curated table
-of ~220 common PyPI/npm packages (each entry verified against the live
+of ~230 common PyPI/npm packages (each entry verified against the live
 registry JSON API), not a registry mirror — use `--online` for full coverage
 against live PyPI/npm metadata (adds a network dependency and is not covered
 by the deterministic test suite).
@@ -122,10 +122,14 @@ to the database in CI (`.github/workflows/audit-license-db.yml`); the `chardet`
 relicensing above is the kind of drift it exists to catch. The classifier
 recognizes registries' free-text and compound license strings where they are
 tier-unambiguous (`Apache License 2.0`, `3-Clause BSD License`, `LGPL-2.1`,
-`CC0-1.0`, `MIT-CMU`, and `AND`/`OR` expressions); entries the registry still
-leaves genuinely ambiguous or unlabeled are reported as `UNVERIFIABLE` and left
-for human review rather than guessed. A recent live run reconciled 219 entries
-as 214 OK / 0 drift / 5 unverifiable.
+`CC0-1.0`, `MIT-CMU`, `Python Software Foundation License`, and `AND`/`OR`
+expressions). Some trove classifiers name a license *family* whose exact SPDX
+id is unrecoverable (a bare `BSD License` does not say 2- vs 3-clause) but whose
+compliance tier is certain; because the audit compares tiers, those are still
+drift-checked rather than punted. Entries the registry leaves genuinely
+tier-ambiguous or unlabeled are reported as `UNVERIFIABLE` and left for human
+review rather than guessed. A recent live run reconciled 227 entries as
+226 OK / 0 drift / 1 unverifiable.
 
 ## License
 

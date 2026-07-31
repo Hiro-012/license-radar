@@ -146,6 +146,17 @@ PYPI_LICENSES = {
     "structlog": "MIT",  # "MIT OR Apache-2.0"; permissive alternative
     "watchfiles": "MIT",
     "httptools": "MIT",
+    # Copyleft packages verified live against the PyPI JSON API (2026-07-31).
+    # These are the false-negative cases that matter most for a compliance
+    # tool: real GPL/LGPL packages a permissive-heavy DB would silently miss.
+    "mysqlclient": "GPL-2.0-or-later",  # license_expression "GPL-2.0-or-later"
+    "levenshtein": "GPL-2.0-or-later",  # license_expression "GPL-2.0-or-later"
+    "python-levenshtein": "GPL-2.0-or-later",  # license field "GPL-2.0-or-later"
+    "pyqt6": "GPL-3.0-only",  # license_expression "GPL-3.0-only"
+    "unidecode": "GPL-2.0-or-later",  # classifier "GPL v2 or later (GPLv2+)"
+    "fuzzywuzzy": "GPL-2.0-only",  # classifier "GPL v2 (GPLv2)"
+    "rope": "LGPL-3.0-or-later",  # license field "LGPL-3.0-or-later"
+    "python-telegram-bot": "LGPL-3.0-only",  # license_expression "LGPL-3.0-only"
     # synthetic fixtures (not a claim about any real package)
     "test-strong-copyleft-pkg": "AGPL-3.0-only",
     "test-weak-copyleft-pkg": "MPL-2.0",

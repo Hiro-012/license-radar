@@ -29,10 +29,16 @@ compares the tiers. It reports:
                       This is the signal that matters (the chardet case).
 * ``OK``           -- tiers agree.
 * ``UNVERIFIABLE`` -- the registry's license metadata is too vague to map to a
-                      known tier (e.g. a bare ``"BSD"`` classifier, a PSF trove
-                      string, or a compound expression containing an atom we
-                      cannot classify). Not a mismatch -- we simply cannot
-                      confirm from the registry, so we do not cry wolf.
+                      known tier (e.g. a compound expression containing an atom
+                      we cannot classify, an exception-bearing ``"LGPL with
+                      exceptions"`` string, or missing metadata). Not a
+                      mismatch -- we simply cannot confirm from the registry, so
+                      we do not cry wolf. Note some trove classifiers name a
+                      license *family* whose exact SPDX id is unrecoverable but
+                      whose compliance *tier* is certain (a bare ``"BSD
+                      License"`` is always permissive); because the audit
+                      compares tiers, those are resolved via a tier-level
+                      fallback rather than being punted (see ``_CLASSIFIER_TIER``).
 
 Compound SPDX expressions (``A AND B``, ``A OR (B AND C)``) are resolved to a
 single tier the same way the hand-curated DB collapses them -- ``AND`` takes
@@ -114,6 +120,25 @@ _CLASSIFIER_SPDX = {
     "GNU Lesser General Public License v3 or later (LGPLv3+)": "LGPL-3.0-or-later",
     "GNU Affero General Public License v3": "AGPL-3.0-only",
     "GNU Affero General Public License v3 or later (AGPLv3+)": "AGPL-3.0-or-later",
+    # PSF-2.0 is a single, tier-unambiguous SPDX id (permissive); matplotlib
+    # declares only this classifier (its `license` field is the full license
+    # text), so without this row it escapes drift monitoring entirely.
+    "Python Software Foundation License": "PSF-2.0",
+}
+
+# Some OSI-Approved trove tails name a *family* rather than a single SPDX id
+# (e.g. a bare "BSD License" that does not say 2- vs 3-clause). Their exact id
+# is unrecoverable, so they must never be turned into a fake SPDX string
+# (``spdx_from_pypi_payload`` still returns None for them). But their compliance
+# *tier* is certain -- every license the trove classifier can denote sits in
+# the same tier -- and the audit compares tiers, not ids. Mapping the tail
+# straight to a tier lets these packages be drift-checked (if one relicensed to
+# copyleft its classifier would change and the audit would flag DRIFT) without
+# ever asserting a clause count we do not know.
+_CLASSIFIER_TIER = {
+    # BSD-2-Clause / BSD-3-Clause / 0BSD are all permissive; no copyleft
+    # license is ever tagged "License :: OSI Approved :: BSD License".
+    "BSD License": TIER_PERMISSIVE,
 }
 
 
@@ -279,6 +304,27 @@ def spdx_from_pypi_payload(info: dict) -> str | None:
     return None
 
 
+def pypi_tier_hint(info: dict):
+    """Compliance tier for a package whose only usable metadata is a
+    tier-unambiguous-but-id-ambiguous OSI classifier (see ``_CLASSIFIER_TIER``).
+
+    Returns ``(tier, classifier_tail)`` so the caller can display the real
+    classifier string rather than a guessed SPDX id, or ``(TIER_UNKNOWN, None)``
+    when no such classifier is present. Pure/offline: safe to unit-test.
+
+    This is a deliberate fallback used only after ``spdx_from_pypi_payload`` +
+    ``registry_tier`` come up empty, so it never overrides a concrete SPDX
+    reduction.
+    """
+    for classifier in info.get("classifiers", []) or []:
+        if not classifier.startswith("License :: "):
+            continue
+        tail = classifier.rsplit(" :: ", 1)[-1].strip()
+        if tail in _CLASSIFIER_TIER:
+            return _CLASSIFIER_TIER[tail], tail
+    return TIER_UNKNOWN, None
+
+
 def spdx_from_npm_payload(doc: dict) -> str | None:
     """Reduce an npm registry document to a single SPDX token, or None."""
     latest = doc.get("dist-tags", {}).get("latest")
@@ -293,10 +339,12 @@ def spdx_from_npm_payload(doc: dict) -> str | None:
 
 def _audit_one(ecosystem: str, name: str, db_spdx: str) -> dict:
     db_tier = classify_license(db_spdx)
+    info = {}
     try:
         if ecosystem == "pypi":
             payload = _http_json(f"https://pypi.org/pypi/{name}/json")
-            reg_spdx = spdx_from_pypi_payload(payload.get("info", {}))
+            info = payload.get("info", {})
+            reg_spdx = spdx_from_pypi_payload(info)
         else:
             payload = _http_json(f"https://registry.npmjs.org/{name}")
             reg_spdx = spdx_from_npm_payload(payload)
@@ -305,6 +353,13 @@ def _audit_one(ecosystem: str, name: str, db_spdx: str) -> dict:
                 "db": db_spdx, "reg": None, "detail": str(exc)[:80]}
 
     reg_tier = registry_tier(reg_spdx)
+    if reg_tier == TIER_UNKNOWN and ecosystem == "pypi":
+        # Last resort: a tier-unambiguous OSI classifier (e.g. bare "BSD
+        # License") we cannot pin to one SPDX id but can pin to one tier.
+        hint_tier, hint_tail = pypi_tier_hint(info)
+        if hint_tier != TIER_UNKNOWN:
+            reg_tier = hint_tier
+            reg_spdx = hint_tail
     if reg_spdx is None or reg_tier == TIER_UNKNOWN:
         status = "UNVERIFIABLE"
     elif reg_tier == db_tier:
