@@ -73,3 +73,26 @@ def classify_license(spdx: str | None) -> str:
 
 def tier_rank(tier: str) -> int:
     return _RANK.get(tier, _RANK[TIER_UNKNOWN])
+
+
+def classify_expression(spdx: str | None) -> str:
+    """Classify a license value that may be a single id *or* a compound SPDX
+    expression (``A AND B``, ``A OR (B AND C)``).
+
+    Tries the single-id path first (``classify_license``, including its loose
+    free-text aliases); only when that yields ``unknown`` does it fall back to
+    full SPDX-expression evaluation. This ordering keeps every string that
+    already resolved resolving exactly the same way -- the compound path is
+    purely additive -- while letting the scanner correctly tier the compound
+    expressions modern registries declare (e.g. ``LGPL-2.1-only OR MIT`` ->
+    permissive, since the licensee may choose MIT).
+
+    Imported lazily to avoid a circular import: ``spdx_expr`` resolves each
+    atom through ``classify_license`` from this module.
+    """
+    tier = classify_license(spdx)
+    if tier != TIER_UNKNOWN:
+        return tier
+    from license_radar.spdx_expr import tier_of_expression
+
+    return tier_of_expression(spdx)

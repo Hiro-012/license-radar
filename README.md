@@ -101,10 +101,18 @@ Licenses are normalized to an SPDX id and bucketed into four tiers:
 ## Limitations
 
 The offline database (`license_radar/license_db.py`) is a hand-curated table
-of ~230 common PyPI/npm packages (each entry verified against the live
+of ~235 common PyPI/npm packages (each entry verified against the live
 registry JSON API), not a registry mirror — use `--online` for full coverage
 against live PyPI/npm metadata (adds a network dependency and is not covered
-by the deterministic test suite).
+by the deterministic test suite). Compound SPDX license expressions that
+registries declare — `A OR B` (the licensee may choose, so the *least*
+restrictive operand governs) and `A AND B` (both apply, so the *most*
+restrictive governs) — are resolved to a single tier by operator semantics
+rather than reported as `unknown`. For example `pycurl`'s
+`LGPL-2.1-only OR MIT` resolves to `permissive` (MIT is a valid choice) and
+`pyside6`'s `LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only` to `weak-copyleft`
+(LGPL is the least restrictive option); any operand the classifier cannot
+resolve leaves the whole expression `unknown` rather than guessed.
 
 Because the offline table is keyed by package name only, a package whose
 license changed across its version history cannot be pinned to a single
@@ -128,8 +136,8 @@ id is unrecoverable (a bare `BSD License` does not say 2- vs 3-clause) but whose
 compliance tier is certain; because the audit compares tiers, those are still
 drift-checked rather than punted. Entries the registry leaves genuinely
 tier-ambiguous or unlabeled are reported as `UNVERIFIABLE` and left for human
-review rather than guessed. A recent live run reconciled 227 entries as
-226 OK / 0 drift / 1 unverifiable.
+review rather than guessed. A recent live run reconciled 232 entries as
+231 OK / 0 drift / 1 unverifiable.
 
 ## License
 

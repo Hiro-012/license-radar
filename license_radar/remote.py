@@ -14,6 +14,38 @@ import urllib.request
 _TIMEOUT = 5.0
 
 
+def reduce_pypi_info(info: dict) -> str | None:
+    """Reduce a PyPI ``info`` object to a single SPDX id or expression, or None.
+
+    Priority mirrors what modern PyPI actually populates: the SPDX
+    ``license_expression`` field first (this is where dual-licensed packages now
+    declare ``Apache-2.0 OR BSD-2-Clause`` etc.), then an OSI-Approved trove
+    classifier, then the legacy free-text ``license`` field. The free-text
+    field is length-guarded so a package that dumps its whole license text into
+    it does not become a bogus token. Pure/offline: safe to unit-test.
+    """
+    expr = (info.get("license_expression") or "").strip()
+    if expr:
+        return expr
+
+    for classifier in info.get("classifiers", []) or []:
+        if classifier.startswith("License :: OSI Approved ::"):
+            return classifier.rsplit("::", 1)[-1].strip()
+
+    license_field = (info.get("license") or "").strip()
+    # The legacy free-text field is where older metadata still puts a
+    # single-line SPDX expression (e.g. pyside6's 44-char
+    # "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only"), so a 40-char cap is too
+    # tight. Guard instead against the real hazard -- a package dumping its
+    # whole license *text* here -- via the newline check plus a generous cap
+    # that no SPDX expression approaches but prose blows past. A non-SPDX line
+    # that slips through still classifies to `unknown` (the safe side).
+    if license_field and len(license_field) <= 100 and "\n" not in license_field:
+        return license_field
+
+    return None
+
+
 def fetch_pypi_license(name: str) -> str | None:
     url = f"https://pypi.org/pypi/{name}/json"
     try:
@@ -22,16 +54,7 @@ def fetch_pypi_license(name: str) -> str | None:
     except (OSError, ValueError):
         return None
 
-    info = data.get("info", {})
-    license_field = (info.get("license") or "").strip()
-    if license_field and len(license_field) < 40:
-        return license_field
-
-    for classifier in info.get("classifiers", []):
-        if classifier.startswith("License :: OSI Approved ::"):
-            return classifier.rsplit("::", 1)[-1].strip()
-
-    return None
+    return reduce_pypi_info(data.get("info", {}))
 
 
 def fetch_npm_license(name: str) -> str | None:

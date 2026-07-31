@@ -157,6 +157,15 @@ PYPI_LICENSES = {
     "fuzzywuzzy": "GPL-2.0-only",  # classifier "GPL v2 (GPLv2)"
     "rope": "LGPL-3.0-or-later",  # license field "LGPL-3.0-or-later"
     "python-telegram-bot": "LGPL-3.0-only",  # license_expression "LGPL-3.0-only"
+    # Copyleft/compound packages verified live against the PyPI JSON API
+    # (2026-07-31). These declare a compound SPDX *expression*; the stored id is
+    # the reduced representative per the OR=least / AND=most restrictive rule
+    # (same reduction the runtime scanner now applies via classify_expression).
+    "rpy2": "GPL-2.0-or-later",  # license_expression "GPL-2.0-or-later"
+    "pyside6": "LGPL-3.0-only",  # license "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only"; OR->least = LGPL-3.0-only
+    "pycurl": "MIT",  # license_expression "LGPL-2.1-only OR MIT"; OR->least = MIT (licensee may choose MIT)
+    "asyncssh": "EPL-2.0",  # license_expression "EPL-2.0 OR GPL-2.0-or-later"; OR->least = EPL-2.0
+    "pygobject": "LGPL-2.1-or-later",  # classifier "GNU Lesser General Public License v2 or later (LGPLv2+)"
     # synthetic fixtures (not a claim about any real package)
     "test-strong-copyleft-pkg": "AGPL-3.0-only",
     "test-weak-copyleft-pkg": "MPL-2.0",

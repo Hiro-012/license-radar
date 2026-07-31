@@ -84,16 +84,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from license_radar.classify import (  # noqa: E402
     TIER_PERMISSIVE,
-    TIER_STRONG_COPYLEFT,
     TIER_UNKNOWN,
-    TIER_WEAK_COPYLEFT,
+    classify_expression as registry_tier,
     classify_license,
-    tier_rank,
 )
 from license_radar.license_db import (  # noqa: E402
     NPM_LICENSES,
     PYPI_LICENSES,
 )
+# The compound-SPDX -> tier reducer now ships in the runtime package so the
+# scanner and this audit share one vetted implementation (re-exported here so
+# the offline unit tests can keep importing it from ``audit_db``).
+from license_radar.spdx_expr import tier_of_expression  # noqa: E402,F401
 
 USER_AGENT = "license-radar-db-audit/1.0 (+https://pypi.org/project/license-radar/)"
 TIMEOUT = 20
@@ -142,135 +144,10 @@ _CLASSIFIER_TIER = {
 }
 
 
-# Tiers ordered from least to most restrictive, indexed by ``tier_rank``.
-# Only the three concrete tiers appear here (rank 0-2); ``unknown`` (rank 3)
-# never results from a fully-resolved expression because any unknown atom
-# aborts evaluation.
-_TIERS_BY_RANK = (TIER_PERMISSIVE, TIER_WEAK_COPYLEFT, TIER_STRONG_COPYLEFT)
-
-
-class _ExprError(Exception):
-    """Raised internally when an SPDX expression cannot be fully resolved."""
-
-
-def _tokenize_spdx(expr: str):
-    """Split an SPDX expression into (), AND, OR and identifier tokens.
-
-    Returns a token list, or None if a character outside the SPDX-expression
-    grammar is seen (which makes the whole string UNVERIFIABLE rather than a
-    guess). Identifiers are returned as ``("ID", text)`` tuples.
-    """
-    tokens = []
-    i, n = 0, len(expr)
-    while i < n:
-        c = expr[i]
-        if c.isspace():
-            i += 1
-            continue
-        if c in "()":
-            tokens.append(c)
-            i += 1
-            continue
-        j = i
-        while j < n and (expr[j].isalnum() or expr[j] in ".-+_"):
-            j += 1
-        if j == i:  # a stray character (comma, slash, ...) -> not an SPDX expr
-            return None
-        word = expr[i:j]
-        upper = word.upper()
-        if upper == "AND":
-            tokens.append("AND")
-        elif upper == "OR":
-            tokens.append("OR")
-        elif upper == "WITH":
-            # License-exception operator; tier-neutral but we do not model
-            # exceptions, so refuse the whole expression rather than guess.
-            return None
-        else:
-            tokens.append(("ID", word))
-        i = j
-    return tokens
-
-
-def _parse_or(toks, pos):
-    # 'A OR B': the licensee may satisfy *either* license, so the effective
-    # obligation is the LEAST restrictive operand (min rank).
-    tier, pos = _parse_and(toks, pos)
-    rank = tier_rank(tier)
-    while pos < len(toks) and toks[pos] == "OR":
-        rtier, pos = _parse_and(toks, pos + 1)
-        rank = min(rank, tier_rank(rtier))
-    return _TIERS_BY_RANK[rank], pos
-
-
-def _parse_and(toks, pos):
-    # 'A AND B': the licensee must satisfy *both*, so the effective obligation
-    # is the MOST restrictive operand (max rank).
-    tier, pos = _parse_atom(toks, pos)
-    rank = tier_rank(tier)
-    while pos < len(toks) and toks[pos] == "AND":
-        rtier, pos = _parse_atom(toks, pos + 1)
-        rank = max(rank, tier_rank(rtier))
-    return _TIERS_BY_RANK[rank], pos
-
-
-def _parse_atom(toks, pos):
-    if pos >= len(toks):
-        raise _ExprError("unexpected end of expression")
-    tok = toks[pos]
-    if tok == "(":
-        tier, pos = _parse_or(toks, pos + 1)
-        if pos >= len(toks) or toks[pos] != ")":
-            raise _ExprError("unbalanced parenthesis")
-        return tier, pos + 1
-    if isinstance(tok, tuple) and tok[0] == "ID":
-        tier = classify_license(tok[1])
-        if tier == TIER_UNKNOWN:
-            # One unresolvable atom makes the whole expression unverifiable;
-            # we never let a min()/max() silently swallow an unknown branch.
-            raise _ExprError(f"unknown license id: {tok[1]}")
-        return tier, pos + 1
-    raise _ExprError("expected a license id or '('")
-
-
-def tier_of_expression(expr: str | None) -> str:
-    """Resolve a compound SPDX expression (``A AND B``, ``A OR (B AND C)``) to
-    a single compliance tier, or ``TIER_UNKNOWN`` if it cannot be fully and
-    unambiguously resolved.
-
-    Semantics mirror how the hand-curated DB collapses compound licenses:
-    ``AND`` takes the most restrictive operand, ``OR`` the least. Any unknown
-    atom, unsupported operator (``WITH``), stray character, or leftover token
-    yields ``TIER_UNKNOWN`` -- the audit refuses to guess rather than risk a
-    spurious DRIFT/OK. Pure/offline: safe to unit-test.
-    """
-    if not expr or not expr.strip():
-        return TIER_UNKNOWN
-    toks = _tokenize_spdx(expr)
-    if not toks:
-        return TIER_UNKNOWN
-    try:
-        tier, pos = _parse_or(toks, 0)
-    except _ExprError:
-        return TIER_UNKNOWN
-    if pos != len(toks):  # trailing tokens -> free text, not an SPDX expression
-        return TIER_UNKNOWN
-    return tier
-
-
-def registry_tier(reg_spdx: str | None) -> str:
-    """Best-effort compliance tier for a registry-declared license string.
-
-    First tries ``classify_license`` directly (single ids and the loose
-    free-text aliases it already understands); only when that is ``unknown``
-    does it fall back to compound-expression evaluation. This ordering keeps
-    every string that resolved before resolving exactly the same way -- the
-    compound path is purely additive.
-    """
-    tier = classify_license(reg_spdx)
-    if tier != TIER_UNKNOWN:
-        return tier
-    return tier_of_expression(reg_spdx)
+# Compound-SPDX resolution (``tier_of_expression``) and the "single id first,
+# expression fallback" combination (``registry_tier`` == ``classify_expression``)
+# are imported from the runtime package above -- one vetted implementation is
+# shared by the scanner and this audit rather than duplicated here.
 
 
 def _http_json(url: str) -> dict:
@@ -299,7 +176,13 @@ def spdx_from_pypi_payload(info: dict) -> str | None:
 
     free = (info.get("license") or "").strip()
     # Guard against packages that dump their whole license text into the field.
-    if free and len(free) <= 40 and "\n" not in free:
+    # Cap matches remote.py's vetted single-line limit (100) so real single-line
+    # SPDX expressions survive -- e.g. pyside6 declares
+    # "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only" (44 chars) only in this
+    # field -- while multi-line/prose dumps are still rejected by the newline
+    # check. Keeping the two functions' caps aligned means the audit tiers a
+    # package exactly the way the shipping --online scanner does.
+    if free and len(free) <= 100 and "\n" not in free:
         return free
     return None
 

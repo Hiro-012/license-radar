@@ -75,6 +75,15 @@ class TestPyPIPayload:
         info = {"license_expression": "", "license": "MIT", "classifiers": []}
         assert spdx_from_pypi_payload(info) == "MIT"
 
+    def test_accepts_single_line_compound_expression(self):
+        # pyside6 declares its full SPDX expression only in the free-text
+        # `license` field (44 chars, single line). The cap (100, matching
+        # remote.py) must let it through so the audit tiers it the same way the
+        # --online scanner does, rather than punting it to UNVERIFIABLE.
+        expr = "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only"
+        info = {"license_expression": "", "license": expr, "classifiers": []}
+        assert spdx_from_pypi_payload(info) == expr
+
     def test_rejects_full_license_text_dump(self):
         blob = "Permission is hereby granted, free of charge, to any person " * 3
         info = {"license_expression": "", "license": blob, "classifiers": []}

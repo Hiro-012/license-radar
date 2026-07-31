@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from license_radar import license_db
-from license_radar.classify import classify_license
+from license_radar.classify import classify_expression
 from license_radar.parsers import discover_manifests, parse_manifest
 
 
@@ -25,7 +25,7 @@ def scan_manifest(path: Path, online: bool = False) -> list[Finding]:
             from license_radar.remote import fetch_remote_license
 
             spdx = fetch_remote_license(ecosystem, name)
-        findings.append(Finding(ecosystem, name, spdx, classify_license(spdx)))
+        findings.append(Finding(ecosystem, name, spdx, classify_expression(spdx)))
     return findings
 
 
