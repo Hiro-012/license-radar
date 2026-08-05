@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>license-radar — GPL/AGPL dependency license scanner</title>
+<meta name="description" content="license-radar is a CLI that scans a project's dependency manifests (requirements.txt, pyproject.toml, package.json, and more) for GPL/AGPL and other copyleft license compliance risk before it becomes a legal problem.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+  .tagline { color: #555; font-size: 1.05rem; margin-top: 0; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<h1>license-radar</h1>
+<p class="tagline">Dependency license compliance scanner for Python and Node projects.</p>
+
+<p>license-radar statically scans a project's dependency manifests —
+<code>requirements.txt</code>, <code>pyproject.toml</code>,
+<code>setup.cfg</code>, <code>Pipfile</code>, <code>package.json</code>,
+including monorepo subprojects — for GPL/AGPL and other copyleft license
+risk, before an accidental dependency turns into an obligation to open your
+own source or a legal problem for a closed-source product.</p>
+
+<h2>Install</h2>
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<h2>Free vs. Pro</h2>
+<table>
+  <tr><th>Free</th><td>Full directory/monorepo scan, every manifest format, <code>--online</code> lookups, <code>--json</code>, custom <code>--policy</code>, and a pre-commit hook. No telemetry, no key required.</td></tr>
+  <tr><th>Pro — one-time purchase</th><td><code>license-radar report</code>: a standalone HTML compliance audit report (per-dependency table, risk-tier summary, applied policy, audit scope) suitable for archiving or handing to legal/compliance review.</td></tr>
+</table>
+
+<p><a class="cta" href="https://github.com/Hiro-012/license-radar">View on GitHub →</a></p>
+
+<footer>
+  <p>By HiroCheck. MIT licensed. Also see <a href="https://pypi.org/project/license-radar/">license-radar on PyPI</a>.</p>
+</footer>
+</body>
+</html>
