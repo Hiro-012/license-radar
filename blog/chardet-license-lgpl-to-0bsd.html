@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>What license is chardet actually under? It depends which version you pinned — license-radar</title>
+<meta name="description" content="chardet relicensed from LGPL-2.1-or-later to 0BSD between its 5.x and 6.x/7.x lines. A license scanner keyed only by package name can't give one correct answer for both — here's why that matters and how to check your own pin.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>What license is chardet actually under? It depends which version you pinned</h1>
+<p class="meta">By HiroCheck · Published 2026-08-07</p>
+
+<p><code>chardet</code> (the character-encoding detector many Python
+projects pull in transitively through <code>requests</code> or similar HTTP
+libraries) changed its license partway through its release history:</p>
+
+<table>
+  <tr><th>Version range</th><td>License</td></tr>
+  <tr><td>&le; 5.2.0</td><td><code>LGPL-2.1-or-later</code> (weak-copyleft — modifications to chardet itself must be shared under LGPL, but merely linking/importing it usually doesn't obligate your own code)</td></tr>
+  <tr><td>6.x / 7.x</td><td><code>0BSD</code> (permissive — effectively public-domain-equivalent, no conditions)</td></tr>
+</table>
+
+<p>Checked directly against the live PyPI JSON API: chardet 5.2.0 reports the
+classifier <code>LGPLv2+</code>, while chardet 7.4.3 reports the license
+expression <code>0BSD</code>. Same package name, two materially different
+licenses depending on which release is actually pinned.</p>
+
+<h2>Why this breaks a lot of license scanners</h2>
+
+<p>Most lightweight license-compliance tools work off an offline table keyed
+by package name: "package X → license Y." That's fast and doesn't need a
+network call, but it silently assumes a package's license is a fixed fact
+about the package rather than a fact about a specific version of it. For a
+package that relicensed mid-history, a name-keyed table has to pick one
+answer — and whichever one it picks is wrong for the other half of that
+package's users.</p>
+
+<p>This isn't a hypothetical edge case — it's a real, checkable relicense:</p>
+
+<pre><code>curl -s https://pypi.org/pypi/chardet/5.2.0/json | grep -i classifier
+curl -s https://pypi.org/pypi/chardet/7.4.3/json | grep -i license_expression</code></pre>
+
+<h2>What to do about it</h2>
+
+<p>If a project depends on <code>chardet</code>, the LGPL-vs-permissive
+question isn't "what license is chardet," it's "what version of chardet is
+actually pinned." Check the lockfile, not the package's PyPI landing-page
+tagline (which, like many older packages, may not reflect the relicense).
+On 5.2.0 or earlier in a closed-source product, LGPL's terms around
+modification and linking are worth reading rather than assuming "it's just
+a dependency."</p>
+
+<h2>How license-radar handles this</h2>
+
+<p><a href="https://pypi.org/project/license-radar/">license-radar</a>
+scans Python and Node dependency manifests for copyleft license risk. Its
+offline database deliberately <em>omits</em> packages like <code>chardet</code>
+whose license isn't stable across versions — rather than guessing, it
+reports them as <code>unknown</code> and flags them for manual review.
+Pass <code>--online</code> to query live PyPI/npm metadata for the exact
+pinned version instead of relying on a name-only offline table:</p>
+
+<pre><code>pip install license-radar
+license-radar scan . --online</code></pre>
+
+<p>license-radar also resolves compound SPDX expressions like
+<code>A OR B</code> and <code>A AND B</code> by their actual operator
+semantics instead of reporting them as <code>unknown</code> outright — but a
+package whose license genuinely changed across its history, like chardet,
+is a different problem that only a version-aware, ideally online, check can
+answer correctly.</p>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

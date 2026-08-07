@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How a GPL or AGPL dependency becomes a legal problem — license-radar</title>
+<meta name="description" content="Real examples of copyleft license enforcement (BusyBox/GPL lawsuits, MongoDB's move to SSPL) and how an accidental GPL/AGPL dependency several layers deep in a project can create the same obligation.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>How a GPL or AGPL dependency becomes a legal problem</h1>
+<p class="meta">By HiroCheck · Published 2026-08-07</p>
+
+<p>Copyleft licenses aren't a hypothetical risk — they've been enforced
+in court and have forced real changes to real products. Two examples,
+for two different reasons a dependency's license matters.</p>
+
+<h2>BusyBox: GPL enforcement through litigation</h2>
+
+<p>Between 2007 and 2009, the Software Freedom Law Center (representing
+BusyBox's developers) filed a series of GPL-violation lawsuits against
+companies — including Monsoon Multimedia, Xterasys, High-Gain
+Antennas, Verizon, and Cisco (over its Linksys division) — that shipped
+embedded devices containing BusyBox and the Linux kernel without
+complying with the GPLv2's source-distribution requirement. Cisco/Linksys
+settled in 2009, agreeing to appoint a compliance officer and pay an
+undisclosed sum. None of these companies set out to violate the GPL —
+BusyBox was almost certainly a transitive dependency, pulled in as part
+of a vendor's firmware or toolchain, several layers removed from the
+engineering decision that actually shipped it.</p>
+
+<h2>MongoDB: relicensing to close a business loophole</h2>
+
+<p>In October 2018, MongoDB moved its server from the AGPLv3 to a new
+license it wrote itself, the Server Side Public License (SSPL). The
+AGPL's core obligation — that offering a modified version of the
+software as a network service requires releasing that modified
+source — was, in MongoDB's own account, not enough to stop large cloud
+providers from offering MongoDB-as-a-service without contributing
+back. The SSPL tightens that obligation further, to the point that the
+Open Source Initiative has not approved it as an open-source license.
+The practical effect for a downstream user is the same shape of risk as
+AGPL: pulling in an SSPL-licensed component can carry obligations that
+don't apply to a permissively-licensed one.</p>
+
+<h2>The common thread</h2>
+
+<p>In both cases, the license risk didn't arrive through a direct,
+deliberate choice to use a copyleft-licensed component in a way that
+would trigger its terms. It arrived through a dependency several layers
+down — a build toolchain, a database driver, a transitive package —
+that nobody explicitly reviewed for its license. <a href="https://pypi.org/project/license-radar/">license-radar</a>
+exists for that gap: it statically scans a project's manifest files
+(<code>requirements.txt</code>, <code>pyproject.toml</code>,
+<code>package.json</code>, and others, including nested monorepo
+subprojects) and flags GPL/AGPL/SSPL and other strong-copyleft
+dependencies — plus anything with a license it can't classify —
+before they ship.</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p>The default policy fails on any strong-copyleft or unknown-license
+dependency; it's configurable per project, and runs offline with no
+account or telemetry.</p>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>
