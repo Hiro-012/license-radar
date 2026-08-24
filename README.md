@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Scan a project's dependency manifests (`requirements.txt`, `pyproject.toml`,
-`setup.cfg`, `Pipfile`, `package.json`) for license compliance risk before a
+`setup.py`, `setup.cfg`, `Pipfile`, `package.json`) for license compliance risk before a
 GPL/AGPL dependency turns into a legal problem for a closed-source product.
 
 ## Why
@@ -42,10 +42,18 @@ manifests bundled inside its dependencies.
 
 Within each manifest, every section that declares the project's own
 dependencies is scanned — not just the primary one. For `pyproject.toml` that
-includes PEP 621 `[project.optional-dependencies]` extras, Poetry
-`[tool.poetry.group.*.dependencies]` groups, and the legacy Poetry (< 1.2)
-`[tool.poetry.dev-dependencies]` table; for legacy `setup.cfg` it includes
-`[options] install_requires` and `[options.extras_require]`; for Pipenv
+includes PEP 621 `[project.optional-dependencies]` extras, the PEP 735
+`[dependency-groups]` table (pip `--group`), Poetry
+`[tool.poetry.group.*.dependencies]` groups, the legacy Poetry (< 1.2)
+`[tool.poetry.dev-dependencies]` table, PDM
+`[tool.pdm.dev-dependencies]`, and Hatch environment dependencies
+(`[tool.hatch.envs.*]` `dependencies` / `extra-dependencies`); for legacy
+`setup.py` it statically reads (never executing the file) the `install_requires`,
+`extras_require`, and `tests_require` arguments to `setup()`, resolving the common
+`REQUIRES = [...]` variable pattern and skipping dynamically-computed entries; for
+legacy `setup.cfg` it includes
+`[options] install_requires`, `tests_require`, `setup_requires`, and
+`[options.extras_require]`; for Pipenv
 `Pipfile` it includes `[packages]` and `[dev-packages]`; for `package.json`
 it includes `optionalDependencies` and `peerDependencies`. A copyleft
 dependency hidden in a `test`/`docs` extra or an optional group is exactly the
@@ -58,8 +66,24 @@ included file — e.g. a thin `requirements.txt` that does `-r prod.txt` — is
 scanned too. `-c`/`--constraint` files only pin versions of already-required
 packages, so they are not followed.
 
+VCS and URL requirements are handled by their real package name: a
+`git+https://…#egg=<name>` reference (including an editable `-e …#egg=<name>`
+install) contributes `<name>`, and a bare archive URL with no `#egg=` fragment
+contributes nothing — the URL scheme is never mistaken for a package. This keeps
+a copyleft dependency installed straight from a VCS from slipping through, and
+avoids spurious `git`/`https` entries in the report.
+
+Backslash line continuations are joined into one logical line before parsing,
+the same way pip reads them. A hash-pinned requirement spread over several
+`\`-continued lines contributes just its package name, and an environment
+marker split across a continuation (`pkg; marker \` / `and platform_system
+...`) no longer leaks its leading word as a phantom `unknown` dependency.
+
 Exit code is `1` if any dependency violates the policy (useful as a CI gate),
 `0` otherwise.
+
+The `license-radar report` command generates a standalone HTML audit report
+from the same scan — see [Pro](#pro) below.
 
 ### pre-commit
 
@@ -78,7 +102,7 @@ repos:
 `pyproject.toml` version bumps until versioned tags are published.)
 
 The hook runs on any commit that touches `requirements*.txt`, `pyproject.toml`,
-`setup.cfg`, `Pipfile`, or `package.json`, and blocks the commit if a new
+`setup.py`, `setup.cfg`, `Pipfile`, or `package.json`, and blocks the commit if a new
 dependency violates policy.
 
 ### Policy
@@ -102,7 +126,7 @@ Licenses are normalized to an SPDX id and bucketed into four tiers:
 ## Limitations
 
 The offline database (`license_radar/license_db.py`) is a hand-curated table
-of ~235 common PyPI/npm packages (each entry verified against the live
+of ~305 common PyPI/npm packages (each entry verified against the live
 registry JSON API), not a registry mirror — use `--online` for full coverage
 against live PyPI/npm metadata (adds a network dependency and is not covered
 by the deterministic test suite). Compound SPDX license expressions that
@@ -137,24 +161,64 @@ id is unrecoverable (a bare `BSD License` does not say 2- vs 3-clause) but whose
 compliance tier is certain; because the audit compares tiers, those are still
 drift-checked rather than punted. Entries the registry leaves genuinely
 tier-ambiguous or unlabeled are reported as `UNVERIFIABLE` and left for human
-review rather than guessed. A recent live run reconciled 232 entries as
-231 OK / 0 drift / 1 unverifiable.
+review rather than guessed. A recent live run reconciled 305 entries as
+304 OK / 0 drift / 1 unverifiable.
+
+## Detection accuracy
+
+`scripts/measure_accuracy.py` measures the scan pipeline itself: it generates a
+manifest declaring every package in the offline database, runs a real scan
+(`parse → lookup → classify → policy`), and checks that each dependency gets the
+verdict its known tier requires. It reports **recall** (fraction of known-risky
+dependencies flagged) and **false-positive rate** (fraction of non-risky
+dependencies wrongly flagged). Latest run over all 305 curated packages:
+
+| Policy | Risky packages | Recall | False-positive rate |
+| --- | --- | --- | --- |
+| default (strong-copyleft + unknown) | 13 | 100.00% | 0.00% |
+| strict (`fail_at_or_above: weak-copyleft`) | 23 | 100.00% | 0.00% |
+
+This validates that no known copyleft dependency is silently dropped by
+parsing, name normalization, classification, or policy — the failure mode that
+would make a compliance gate quietly useless. It takes the database as the
+oracle, so it measures the *pipeline*, not the database's fidelity to live
+registries; that separate check is `scripts/audit_db.py` above. The same
+measurement runs in the test suite (`tests/test_accuracy.py`) as a regression
+guard, and the script exits non-zero if recall ever drops below 100% or a
+false positive appears.
 
 ## License
 
 MIT
 
-## Support
+## Pro
+
+The core check is and stays free: `license-radar scan` — directory/monorepo
+scanning, every manifest format, `--online` lookups, `--json`, `--policy`, the
+pre-commit hook — runs entirely on your machine, sends no telemetry, and never
+asks for a key.
+
+**Pro** adds one thing: `license-radar report`, which turns a scan into a
+standalone HTML compliance audit report — a per-dependency table with
+violations highlighted, risk-tier summary, the applied policy, and an explicit
+audit scope listing exactly which manifest files were examined — in a single
+self-contained file suitable for archiving or handing to legal/compliance
+review. It's a one-time purchase (no subscription, no account):
+
+**→ https://buy.stripe.com/cNifZifg06eld9La50dMI01**
+
+After purchase you receive a license key. Use it via the flag or an env var:
+
+```bash
+license-radar report . --license-key <KEY> -o audit.html
+# or
+export LICENSE_RADAR_KEY=<KEY>
+license-radar report . -o audit.html
+```
+
+Without a valid key, `report` prints the purchase link and exits non-zero; the
+free `scan` command is completely unaffected.
 
 `license-radar` is built and maintained independently under the **HiroCheck**
-name. It's free under the MIT license, its default scan runs entirely on your
-machine, it sends no telemetry, and no paid tier gates the core check.
-
-If it caught a license problem for you — or you'd just like to see the offline
-database and manifest coverage keep growing — a one-off contribution funds the
-time that goes into it:
-
-**→ https://buy.stripe.com/bJeeVe2te0U16Ln1yudMI00**
-
-Not in a position to chip in? Starring the repo, or opening an issue when the
-database gets a package's license wrong, helps just as much and costs nothing.
+name. Starring the repo, or opening an issue when the database gets a package's
+license wrong, helps too and costs nothing.
