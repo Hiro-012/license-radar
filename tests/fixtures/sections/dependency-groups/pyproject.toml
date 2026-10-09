@@ -1,0 +1,14 @@
+# PEP 735 dependency groups: a standardized top-level [dependency-groups]
+# table adopted by pip (--group), PDM, and Hatch. A copyleft dependency
+# declared only in a test/lint group here must still be scanned. The `all`
+# group uses include-group tables (not requirement strings) and must not
+# contribute a bogus name.
+[project]
+name = "pep735-app"
+version = "0.0.0"
+dependencies = ["requests"]
+
+[dependency-groups]
+test = ["pytest", "python-levenshtein"]
+lint = ["ruff"]
+all = [{include-group = "test"}, {include-group = "lint"}]

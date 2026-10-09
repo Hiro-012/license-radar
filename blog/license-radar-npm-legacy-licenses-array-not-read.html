@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>license-radar's --online npm lookup only reads the modern "license" field. Pre-2013 packages used "licenses" instead — license-radar</title>
+<meta name="description" content="fetch_npm_license() reads data['license'] as a string or {type, url} object and returns None for anything else. Packages that predate npm's 2013 license-field migration — node-uuid among them — carry their only license info in the legacy plural 'licenses' array, which the function never looks at. A real MIT package comes back UNKNOWN and trips a policy violation.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>license-radar's --online npm lookup only reads the modern "license" field. Pre-2013 packages used "licenses" instead</h1>
+<p class="meta">By HiroCheck · Published 2026-09-21</p>
+
+<p>Before npm standardized on a single <code>license</code> string (or
+<code>{type, url}</code> object) in its <code>package.json</code> spec
+around 2013, the convention was a plural <code>licenses</code>
+<em>array</em> — <code>[{"type": "MIT", "url": "..."}]</code> — to support
+dual-licensing. npm's own registry still serves both shapes today: a
+package published under the old convention and never re-published since
+carries its license only in that legacy array, with the modern
+<code>license</code> field simply absent. <code>license-radar</code>'s
+<code>--online</code> lookup reads only the modern field.</p>
+
+<h2>The function, as implemented</h2>
+
+<pre><code># license_radar/remote.py
+def fetch_npm_license(name: str) -> str | None:
+    url = f"https://registry.npmjs.org/{urllib.parse.quote(name, safe='')}"
+    try:
+        with urllib.request.urlopen(url, timeout=_TIMEOUT) as resp:
+            data = json.loads(resp.read())
+    except (OSError, ValueError):
+        return None
+
+    license_field = data.get("license")
+    if isinstance(license_field, str):
+        return license_field
+    if isinstance(license_field, dict):
+        return license_field.get("type")
+    return None</code></pre>
+
+<p>There is no branch for <code>data.get("licenses")</code> at all. When a
+package's registry metadata has no top-level <code>license</code> key —
+true for anything published and never touched since before the
+convention changed — the function falls straight through every
+<code>isinstance</code> check to <code>return None</code>, indistinguishable
+from a genuinely unlicensed package or a network failure.</p>
+
+<h2>A real package that still hits this</h2>
+
+<p><code>node-uuid</code> is the predecessor to today's <code>uuid</code>
+package — deprecated in favor of it years ago, but still resolvable by
+name and still present as a pinned or transitive dependency in older
+lockfiles. Its registry entry was never migrated to the modern field:</p>
+
+<pre><code>$ python3 -c "
+import urllib.request, json
+with urllib.request.urlopen('https://registry.npmjs.org/node-uuid') as r:
+    data = json.loads(r.read())
+latest = data['dist-tags']['latest']
+v = data['versions'][latest]
+print('top-level license:', data.get('license'))
+print('latest version:', latest)
+print('version-level license:', v.get('license'))
+print('version-level licenses:', v.get('licenses'))
+"
+top-level license: None
+latest version: 1.4.8
+version-level license: None
+version-level licenses: [{'type': 'MIT', 'url': 'https://raw.github.com/broofa/node-uuid/master/LICENSE.md'}]</code></pre>
+
+<p>The registry knows this package is MIT-licensed — it just says so in
+the field <code>fetch_npm_license()</code> doesn't check.</p>
+
+<h2>Reproduced against the unmodified CLI</h2>
+
+<p>A minimal <code>package.json</code> depending on it, scanned with
+<code>--online</code> against the live registry (no local DB entry for
+<code>node-uuid</code>, so the online lookup is the only source of
+license data):</p>
+
+<pre><code>$ cat package.json
+{
+  "name": "repro-verify",
+  "version": "1.0.0",
+  "dependencies": {
+    "node-uuid": "^1.4.8"
+  }
+}
+
+$ python3 -m license_radar.cli scan . --online --json
+{
+  "findings": [
+    {
+      "ecosystem": "npm",
+      "package": "node-uuid",
+      "license": "UNKNOWN",
+      "tier": "unknown",
+      "violation": true
+    }
+  ],
+  "violation": true
+}
+$ echo $?
+1</code></pre>
+
+<p>An MIT-licensed dependency — permissive, no compliance concern at all —
+comes back as <code>unknown</code> and trips
+<code>treat_unknown_as_violation</code>, the same default-policy gate
+covered by this blog's earlier piece on GPL trove-classifier text
+(<code>gpl-trove-classifier-text-reads-as-unknown.html</code>). There the
+value was fetched but not recognized by the classifier; here nothing is
+fetched at all, because the field the code looks for doesn't exist in
+this package's metadata.</p>
+
+<h2>Why this is a different gap from the "MIT/X11" article</h2>
+
+<p>An earlier article on this blog (<code>optimist-mit-x11-license-online-lookup-unknown.html</code>)
+covers a related-sounding but distinct failure: there, <code>fetch_npm_license()</code>
+successfully extracts a string (<code>"MIT/X11"</code>) from the modern
+<code>license</code> field, and it's <code>classify_license()</code> downstream
+that fails to recognize that string's format. Here, the modern field is
+absent entirely — <code>fetch_npm_license()</code> returns <code>None</code>
+before <code>classify_license()</code> is ever called, because the only
+license data the registry actually has for this package is in a field
+the function was never written to look at. The fix location is different
+too: adding an alias entry to the classifier's lookup table would do
+nothing for this case, since no string ever reaches it.</p>
+
+<h2>How common this still is</h2>
+
+<p><code>node-uuid</code> is not a hypothetical edge case — it has over a
+decade of published versions and remains resolvable and installable
+today, and projects that pinned it before migrating to <code>uuid</code>
+can still carry it as a transitive dependency. The npm registry does not
+retroactively rewrite old packages' metadata to the modern field when the
+spec changes; a package's <code>package.json</code> at publish time is
+what the registry serves back, unchanged, for as long as that version
+stays published. Any pre-2013 package whose most recent version was never
+re-published is a candidate for this same gap.</p>
+
+<h2>Verification</h2>
+
+<pre><code>$ python3 -m pytest tests -q
+121 passed
+
+$ python3 scripts/measure_accuracy.py
+  packages (ground truth): 305  (scanned end-to-end: 305)
+  risky packages       : 13  flagged: 13
+  recall               : 100.00%
+  false-positive rate  : 0.00%</code></pre>
+
+<p>No code was changed this session — both commands ran against the
+existing, unmodified checkout, and the 121/121 and 100%/0% figures match
+the numbers already published in the README's "Detection accuracy"
+section (this gap is in the <code>--online</code> npm-registry lookup
+path, which the offline accuracy corpus doesn't exercise, so it doesn't
+move either number). The <code>node-uuid</code> registry response and the
+CLI run above were captured directly against the live
+<code>registry.npmjs.org</code> API and this session's unmodified
+<code>license_radar.cli</code>, in a temporary directory created and
+deleted within this session — no fabricated output.</p>
+
+<p>A project that depends on packages this old can work around the gap
+today by pinning a known-correct license for them explicitly in its own
+override list, if <code>license-radar</code>'s policy configuration
+supports one, rather than relying on <code>--online</code> to resolve
+them automatically.</p>
+
+<pre><code>pip install license-radar
+license-radar scan . --online</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>"Unlicense" and "UNLICENSED" look like the same word. license-radar treats them as opposites — because they are</title>
+<meta name="description" content="Unlicense is a real, permissive, OSI-approved SPDX license. UNLICENSED is npm's own convention for a package the author has published no rights to use at all. One capitalization change separates a public-domain grant from a no-rights-granted marker, and license-radar's classifier only ever treats the exact SPDX string as permissive.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>"Unlicense" and "UNLICENSED" look like the same word. license-radar treats them as opposites</h1>
+<p class="meta">By HiroCheck · Published 2026-08-29</p>
+
+<p>Two strings, one capitalization change apart: <code>Unlicense</code> and
+<code>UNLICENSED</code>. They read like the same word typed two different
+ways. They are not the same license — they are close to opposite answers to
+the question "can I use this code."</p>
+
+<h2>Unlicense: a real, permissive SPDX license</h2>
+
+<p><code>Unlicense</code> is an SPDX-registered license identifier (added to
+the SPDX License List in 2020), OSI-approved and FSF-approved, with no
+copyleft requirement. Its own text opens with the plainest possible grant:</p>
+
+<pre><code>This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any means.</code></pre>
+
+<p>A package declaring <code>"license": "Unlicense"</code> is, as close as
+software licensing gets, saying "take it, no strings attached."</p>
+
+<h2>UNLICENSED: npm's marker for the opposite</h2>
+
+<p><code>UNLICENSED</code> is not an SPDX identifier at all — it's npm's own
+documented convention for the <code>package.json</code> <code>license</code>
+field, meant for a package the author does <strong>not</strong> want anyone
+else to use. It shows up on real, public npm packages, not just private
+ones — the registry itself reports it as the license string, no
+interpretation needed:</p>
+
+<pre><code>curl -s https://registry.npmjs.org/unlicensed/latest | python3 -c \
+  "import json,sys; d=json.load(sys.stdin); print(d['name'], d['license'])"
+&gt; unlicensed UNLICENSED</code></pre>
+
+<p>Whatever the author's actual intent, the string npm's own convention
+assigns to it means "you do not wish to grant others the right to use a
+private or unpublished package under any terms" — the closest thing to a
+license field can get to "no license granted."</p>
+
+<h2>What license-radar actually does with each string</h2>
+
+<p>Checked directly against the shipped classifier:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar import classify
+&gt;&gt;&gt; classify.classify_license("Unlicense")
+'permissive'
+&gt;&gt;&gt; classify.classify_license("UNLICENSED")
+'unknown'
+&gt;&gt;&gt; classify.classify_license("unlicense")   # lowercase
+'unknown'
+&gt;&gt;&gt; classify.classify_license("unlicensed")  # lowercase, no SPDX form at all
+'unknown'</code></pre>
+
+<p>Only the exact SPDX-cased string <code>Unlicense</code> resolves to
+<code>permissive</code>. Everything else that merely looks like it — npm's
+<code>UNLICENSED</code>, a lowercased <code>unlicense</code>, or the plain
+English word <code>unlicensed</code> — falls through to
+<code>unknown</code>, license-radar's catch-all for "don't guess, flag it
+for a human." That's the conservative direction to fail in: a package
+that's actually public domain but gets flagged unknown costs someone a
+few seconds of review; a proprietary package that gets waved through as
+permissive doesn't.</p>
+
+<table>
+  <tr><th>String</th><th>Where it comes from</th><th>Actual meaning</th><th>license-radar tier</th></tr>
+  <tr><td><code>Unlicense</code></td><td>SPDX License List</td><td>Public-domain-equivalent grant, OSI-approved</td><td><code>permissive</code></td></tr>
+  <tr><td><code>UNLICENSED</code></td><td>npm's own package.json convention</td><td>No usage rights granted at all</td><td><code>unknown</code></td></tr>
+</table>
+
+<h2>This isn't a hypothetical mix-up</h2>
+
+<p>The two strings are close enough that even a widely used toolchain's own
+documentation has recommended the wrong one. Solidity's compiler docs tell
+authors to use <code>UNLICENSED</code> as the SPDX license identifier
+comment for closed-source contracts — but as a
+<a href="https://github.com/argotorg/solidity/issues/12251">2025 issue
+against the Solidity repository</a> points out, <code>UNLICENSED</code>
+isn't a valid SPDX identifier at all, and the only valid identifier close
+enough to autocomplete or copy-paste into its place —
+<code>Unlicense</code> — means the exact opposite of what the docs
+intend. If a compiler's own documentation can point developers at the
+wrong one of these two strings, a person hand-editing a
+<code>package.json</code> license field, or a reviewer skimming a
+license report, can just as easily do the same.</p>
+
+<h2>What to actually check</h2>
+
+<p>If license-radar (or any scanner) reports a package's license as
+<code>unknown</code> and the raw string looks like some form of
+"unlicense," don't normalize it away — read which exact string is
+present. <code>Unlicense</code> (capital U, no trailing marks) is a real
+permissive grant. Anything else that merely resembles it —
+<code>UNLICENSED</code>, <code>unlicensed</code>, a lowercase
+<code>unlicense</code>, or a blank field — means license-radar has no
+confident answer, which for this pair of strings is exactly the outcome
+you want: getting it wrong here doesn't fail safe in only one direction.</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

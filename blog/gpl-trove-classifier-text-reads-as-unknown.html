@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PyPI's own GPL classifier text says "GNU General Public License" in plain words — license-radar reads it as unknown</title>
+<meta name="description" content="mysql-connector-python's live PyPI metadata has no license_expression and a free-text license field, so license-radar's --online mode falls back to its one remaining classifier: 'License :: OSI Approved :: GNU General Public License (GPL)'. That exact string, and every other full-text GNU trove classifier tested, resolves to 'unknown' rather than strong-copyleft — because license-radar's alias table only recognizes compact SPDX-style abbreviations, not PyPI's own official classifier wording. Verified against the live PyPI API and a real scan.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>PyPI's own GPL classifier text says "GNU General Public License" in plain words — license-radar reads it as unknown</h1>
+<p class="meta">By HiroCheck · Published 2026-09-14</p>
+
+<p><a href="https://pypi.org/project/mysql-connector-python/">mysql-connector-python</a>
+— Oracle's own official MySQL driver for Python, one of the most widely
+installed database connectors on PyPI — carries no
+<code>license_expression</code> field. Its live metadata right now:</p>
+
+<pre><code>curl -s https://pypi.org/pypi/mysql-connector-python/json \
+  | python3 -c "import json,sys; d=json.load(sys.stdin)['info']; \
+    print('license:', d['license']); \
+    print('license_expression:', d['license_expression']); \
+    print('classifiers:', [c for c in d['classifiers'] if 'License' in c])"
+# -> license: GNU GPLv2 (with FOSS License Exception)
+# -> license_expression: None
+# -> classifiers: ['License :: OSI Approved :: GNU General Public License (GPL)']</code></pre>
+
+<p>The package is GPL-2.0, plain and unambiguous — Oracle spells it out in
+both the free-text field and the classifier. This is exactly the kind of
+dependency <a href="https://pypi.org/project/license-radar/">license-radar</a>
+exists to catch: a strong-copyleft license pulled into a project's
+dependency tree.</p>
+
+<h2>What license-radar's own resolver does with it</h2>
+
+<p><code>remote.py</code>'s <code>reduce_pypi_info()</code> has a documented
+priority order: <code>license_expression</code> first, then a
+<code>License :: OSI Approved ::</code> classifier, then the free-text
+<code>license</code> field. For this package, <code>license_expression</code>
+is empty, so it correctly falls through to the classifier and extracts the
+text after the last <code>::</code>:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar.remote import reduce_pypi_info
+&gt;&gt;&gt; info = {
+...     "license": "GNU GPLv2 (with FOSS License Exception)",
+...     "license_expression": None,
+...     "classifiers": ["License :: OSI Approved :: GNU General Public License (GPL)"],
+... }
+&gt;&gt;&gt; reduce_pypi_info(info)
+'GNU General Public License (GPL)'
+&gt;&gt;&gt; from license_radar.classify import classify_expression
+&gt;&gt;&gt; classify_expression('GNU General Public License (GPL)')
+'unknown'</code></pre>
+
+<p>The extraction is correct — that really is the classifier PyPI serves for
+this package today. The problem is one step later: <code>classify.py</code>'s
+alias table only recognizes compact, SPDX-adjacent spellings ("GPLV3", "GPL
+V3", "GPL-3.0"). It has no entry for the full official PyPI trove-classifier
+wording, which is what <code>reduce_pypi_info()</code> actually hands it in
+practice whenever a package relies on classifiers instead of the newer
+<code>license_expression</code> field. The same gap holds for every other
+standard GNU-family classifier, not just this one:</p>
+
+<pre><code>&gt;&gt;&gt; for text in [
+...     "GNU General Public License (GPL)",
+...     "GNU General Public License v2 (GPLv2)",
+...     "GNU General Public License v2 or later (GPLv2+)",
+...     "GNU General Public License v3 (GPLv3)",
+...     "GNU General Public License v3 or later (GPLv3+)",
+...     "GNU Affero General Public License v3",
+...     "GNU Affero General Public License v3 or later (AGPLv3+)",
+... ]:
+...     print(text, "->", classify_expression(text))
+GNU General Public License (GPL) -> unknown
+GNU General Public License v2 (GPLv2) -> unknown
+GNU General Public License v2 or later (GPLv2+) -> unknown
+GNU General Public License v3 (GPLv3) -> unknown
+GNU General Public License v3 or later (GPLv3+) -> unknown
+GNU Affero General Public License v3 -> unknown
+GNU Affero General Public License v3 or later (AGPLv3+) -> unknown</code></pre>
+
+<p>Every one of these is real, current PyPI classifier text — not a made-up
+edge case. A package that predates the <code>license_expression</code> field
+(most of PyPI's older, established GPL-licensed packages) and never had a
+compact free-text <code>license</code> alias added has no path in
+license-radar's resolver to the correct strong-copyleft answer, only to
+unknown.</p>
+
+<h2>A sibling package that gets it right — for a different reason</h2>
+
+<p><code>mysqlclient</code>, a separate, also-widely-used MySQL driver, is
+correctly recorded in license-radar's own static database:</p>
+
+<pre><code>"mysqlclient": "GPL-2.0-or-later",  # license_expression "GPL-2.0-or-later"</code></pre>
+
+<p>That entry resolves to strong-copyleft — but only because a human copied
+the exact SPDX id from <code>mysqlclient</code>'s (correctly populated)
+<code>license_expression</code> field into the static DB by hand. It says
+nothing about whether the classifier-text path itself works; it doesn't,
+which is exactly what leaves <code>mysql-connector-python</code> — same
+database engine, same license family, no entry in the static DB, no
+<code>license_expression</code> on PyPI — with no resolvable answer.</p>
+
+<h2>Does this actually let a GPL dependency through?</h2>
+
+<p>Not by default. license-radar's default policy treats an
+<code>unknown</code> tier as a violation
+(<code>treat_unknown_as_violation: True</code> in <code>policy.py</code>),
+so a live scan of a project depending on this package still fails and gets
+a human's attention — just under the wrong label:</p>
+
+<pre><code>$ echo "mysql-connector-python==8.4.0" &gt; requirements.txt
+$ python3 -m license_radar.cli scan --online .
+[pypi] mysql-connector-python: GNU General Public License (GPL) (unknown) !!
+
+VIOLATIONS FOUND</code></pre>
+
+<p>But <code>treat_unknown_as_violation</code> is a documented, supported
+policy knob — a team drowning in "unknown" findings from packages with
+genuinely sparse metadata has a real reason to flip it off rather than
+allowlist each one by hand. Doing that turns this specific gap from a
+mislabeled violation into a silent pass, for a package that is
+unambiguously GPL:</p>
+
+<pre><code>$ echo '{"treat_unknown_as_violation": false}' &gt; policy.json
+$ python3 -m license_radar.cli scan --online --policy policy.json .
+[pypi] mysql-connector-python: GNU General Public License (GPL) (unknown)
+
+OK — no policy violations</code></pre>
+
+<p>Both commands were run against the real CLI, unmodified, with live
+<code>--online</code> lookups against the current PyPI API — nothing here is
+simulated. Full suite, unchanged by this article (no code was modified, only
+run): <strong>121 passed</strong> (<code>pytest tests/ -q</code>, repository
+root).</p>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

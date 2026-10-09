@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PyPI lists orjson under three OSI licenses. AND makes sure only one of them actually binds — license-radar</title>
+<meta name="description" content="orjson's PyPI classifiers list Apache, MIT and Mozilla Public License 2.0 side by side, with no order between them. Its actual license_expression is 'MPL-2.0 AND (Apache-2.0 OR MIT)' — a nested AND/OR that a classifier-only scanner has no way to resolve, and gets wrong if it just picks the first name it recognizes. Verified against the live PyPI API and license-radar's own parser.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>PyPI lists orjson under three OSI licenses. AND makes sure only one of them actually binds</h1>
+<p class="meta">By HiroCheck · Published 2026-09-07</p>
+
+<p><a href="https://pypi.org/project/orjson/">orjson</a> — a fast JSON
+library for Python, widely pulled in as a drop-in replacement for the
+standard library's <code>json</code> module — carries three separate
+<code>License ::</code> trove classifiers on PyPI, listed with no ordering
+or structure between them:</p>
+
+<pre><code>curl -s https://pypi.org/pypi/orjson/json | python3 -c \
+  "import json,sys; d=json.load(sys.stdin)['info']; \
+   print([c for c in d['classifiers'] if 'License' in c])"
+# -> ['License :: OSI Approved :: Apache Software License',
+#     'License :: OSI Approved :: MIT License',
+#     'License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)']</code></pre>
+
+<p>A scanner that only reads classifiers — the flat list, with no way to
+express how the three relate — has to guess which one is "the" license.
+The actual answer isn't a guess. orjson's structured
+<code>license_expression</code> field, present in the same PyPI JSON
+response, spells out the relationship directly:</p>
+
+<pre><code>print(d['license_expression'])
+# -> MPL-2.0 AND (Apache-2.0 OR MIT)</code></pre>
+
+<h2>What the nesting actually says</h2>
+
+<p>Read outside-in: the whole package is under <code>MPL-2.0</code>
+<strong>AND</strong> a separate <code>(Apache-2.0 OR MIT)</code> grant. The
+parenthesized <code>OR</code> is real — some part of orjson's code is
+dual-licensed, and a licensee gets to pick whichever of Apache-2.0 or MIT is
+more convenient for that part. But the <code>AND</code> wrapped around it is
+not optional: satisfying the OR-branch does not excuse you from the MPL-2.0
+terms that apply to the rest of the codebase. You don't get to point at the
+OR, pick MIT, and walk away — MPL-2.0's file-level copyleft obligations
+still bind regardless of which side of the OR you'd have chosen.</p>
+
+<p>That makes the three flat classifiers actively misleading on their own.
+Nothing in the classifier list distinguishes "you may pick any of these
+three" from "one of these plus a choice of the other two." A tool — or a
+person — that just sees "Apache, MIT, MPL, pick whichever looks best" has no
+way to recover the actual structure from that list alone.</p>
+
+<h2>What a classifier-only reading would get wrong</h2>
+
+<p>The classifiers list carries no order guarantee, but even taking them at
+face value in the order PyPI returns them (Apache first) shows the failure
+mode directly:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar.classify import classify_license, classify_expression
+&gt;&gt;&gt; classify_license("Apache-2.0")   # naive: first classifier in the list
+'permissive'
+&gt;&gt;&gt; classify_expression("MPL-2.0 AND (Apache-2.0 OR MIT)")   # actual expression
+'weak-copyleft'</code></pre>
+
+<p>Picking the first recognizable classifier calls orjson permissive.
+Resolving the actual expression puts it at weak-copyleft — the same tier as
+tqdm's <code>MPL-2.0 AND MIT</code> (covered in an
+<a href="./tqdm-mpl-and-mit-license-expression.html">earlier post</a>), but
+arrived at through a nested expression rather than a flat one. The gap
+between those two answers is exactly the MPL-2.0 file-level obligation that
+a permissive verdict silently drops.</p>
+
+<h2>How license-radar resolves the nesting</h2>
+
+<p><a href="https://pypi.org/project/license-radar/">license-radar</a>'s
+expression resolver (<code>spdx_expr.py</code>) implements SPDX operator
+precedence directly — <code>AND</code> binds tighter than <code>OR</code>,
+parentheses group as usual, <code>AND</code> takes the <em>most</em>
+restrictive operand and <code>OR</code> the <em>least</em> — rather than
+matching on any single token in the string:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar.spdx_expr import tier_of_expression
+&gt;&gt;&gt; tier_of_expression("MPL-2.0 AND (Apache-2.0 OR MIT)")
+'weak-copyleft'
+&gt;&gt;&gt; tier_of_expression("Apache-2.0 AND MIT")   # no OR branch, for contrast
+'permissive'</code></pre>
+
+<p>This exact expression is the resolver's own canonical example — the
+module-level docstring in <code>spdx_expr.py</code> cites orjson's
+<code>MPL-2.0 AND (Apache-2.0 OR MIT)</code> by name as the case that
+motivated supporting parenthesized, mixed AND/OR expressions rather than
+only flat lists. license-radar's static package DB pins the same package as
+a regression fixture with the same reasoning recorded inline
+(<code>"orjson": "MPL-2.0",  # "MPL-2.0 AND (Apache-2.0 OR MIT)"; MPL term
+applies</code>), and the test suite asserts both
+<code>classify_expression("MPL-2.0 AND (Apache-2.0 OR MIT)") ==
+"weak-copyleft"</code> directly and <code>("pypi", "orjson")</code> resolving
+to <code>weak-copyleft</code> through a full scan fixture. Full suite,
+unchanged by this article: <strong>118 passed</strong>
+(<code>pytest tests/ -q</code>, repository root).</p>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

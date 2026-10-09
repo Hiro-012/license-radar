@@ -105,9 +105,13 @@ def test_strong_copyleft_in_setup_cfg_is_flagged_end_to_end():
     policy = load_policy(None)
     findings = scan_manifest(FIXTURES / "setupcfg_project" / "setup.cfg")
     by_pkg = {f.package: f for f in findings}
-    assert set(by_pkg) == {"requests", "pyqt5"}
+    # python-levenshtein sits only in tests_require: a copyleft dep declared in
+    # that list must be discovered and flagged just like an install_requires one.
+    assert set(by_pkg) == {"requests", "pyqt5", "python-levenshtein"}
     assert by_pkg["pyqt5"].tier == "strong-copyleft"
     assert violates(by_pkg["pyqt5"], policy) is True
+    assert by_pkg["python-levenshtein"].tier == "strong-copyleft"
+    assert violates(by_pkg["python-levenshtein"], policy) is True
     assert violates(by_pkg["requests"], policy) is False
 
 

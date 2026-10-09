@@ -1,0 +1,11 @@
+# VCS / URL direct references and editable installs. The package a VCS ref
+# installs is named only by its #egg= fragment; a bare archive URL names none.
+requests>=2.0  # an inline comment must not be mistaken for an #egg fragment
+git+https://github.com/example/foolib.git@v1.2.3#egg=foolib
+-e git+https://github.com/example/barlib.git#egg=barlib
+hg+https://example.org/quuxlib#egg=quuxlib
+https://example.com/archives/bazlib-1.0.tar.gz
+bazlib
+mypkg @ git+https://github.com/example/mypkg.git
+-e .
+--hash=sha256:deadbeef

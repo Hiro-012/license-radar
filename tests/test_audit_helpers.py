@@ -7,12 +7,17 @@ into a single SPDX-ish token -- must stay correct, so they are exercised here
 with hand-built payloads and no network.
 """
 
+import http.client
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
+import audit_db  # noqa: E402
 from audit_db import (  # noqa: E402
     pypi_tier_hint,
     registry_tier,
@@ -244,3 +249,86 @@ class TestPyPITierHint:
             ],
         }
         assert spdx_from_pypi_payload(info) == "MIT"
+
+
+class _FakeResp:
+    """Minimal stand-in for an http.client.HTTPResponse for json.load()."""
+
+    def __init__(self, payload):
+        self._data = json.dumps(payload).encode()
+
+    def read(self, *args):
+        return self._data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class TestHttpJsonRetries:
+    """A single transient wire failure must not abort the ~230-request audit.
+
+    Regression guard for the crash observed in practice: a partially-read body
+    raises http.client.IncompleteRead, which is NOT a urllib URLError, so it
+    slipped past _audit_one's except clause and pool.map re-raised it -- taking
+    down every other package's result. _http_json now retries transient errors,
+    and _audit_one catches whatever survives as a fail-soft ERROR row.
+    """
+
+    def _patch_urlopen(self, monkeypatch, side_effects):
+        """Feed urlopen a queue: an exception is raised, else a _FakeResp."""
+        calls = {"n": 0}
+        queue = list(side_effects)
+
+        def fake_urlopen(req, timeout=None):
+            calls["n"] += 1
+            item = queue.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return _FakeResp(item)
+
+        monkeypatch.setattr(audit_db.urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr(audit_db.time, "sleep", lambda *a: None)
+        return calls
+
+    def test_retries_incomplete_read_then_succeeds(self, monkeypatch):
+        calls = self._patch_urlopen(
+            monkeypatch,
+            [http.client.IncompleteRead(b"partial"), {"ok": True}],
+        )
+        assert audit_db._http_json("https://example/x", backoff=0) == {"ok": True}
+        assert calls["n"] == 2  # one failed attempt, one success
+
+    def test_gives_up_after_exhausting_retries(self, monkeypatch):
+        calls = self._patch_urlopen(
+            monkeypatch,
+            [http.client.IncompleteRead(b"a")] * 3,
+        )
+        with pytest.raises(http.client.IncompleteRead):
+            audit_db._http_json("https://example/x", retries=3, backoff=0)
+        assert calls["n"] == 3  # exactly HTTP_RETRIES attempts, no more
+
+    def test_does_not_retry_http_error(self, monkeypatch):
+        # A 404 is permanent (package genuinely absent) -- retrying would only
+        # hammer the registry. It must raise on the first attempt.
+        err = audit_db.urllib.error.HTTPError(
+            "https://example/x", 404, "Not Found", {}, None
+        )
+        calls = self._patch_urlopen(monkeypatch, [err])
+        with pytest.raises(audit_db.urllib.error.HTTPError):
+            audit_db._http_json("https://example/x", backoff=0)
+        assert calls["n"] == 1
+
+    def test_audit_one_reports_error_instead_of_crashing(self, monkeypatch):
+        # After retries are exhausted the IncompleteRead reaches _audit_one; it
+        # must be caught as an ERROR row (fail-soft), never propagate to pool.map.
+        monkeypatch.setattr(
+            audit_db,
+            "_http_json",
+            lambda *a, **k: (_ for _ in ()).throw(http.client.IncompleteRead(b"x")),
+        )
+        row = audit_db._audit_one("pypi", "somepkg", "MIT")
+        assert row["status"] == "ERROR"
+        assert row["name"] == "somepkg"

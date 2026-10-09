@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>license-radar reads dependencies, devDependencies, optionalDependencies and peerDependencies — not bundledDependencies — license-radar</title>
+<meta name="description" content="npm's package.json supports a fifth dependency field, bundledDependencies (or the alternate spelling bundleDependencies), for packages whose source gets bundled into the published tarball. license_radar.parse_package_json() reads four of the five standard fields and has no code path for either spelling of this one, so an AGPL-3.0 package declared only there scans as 'No dependencies found. OK'.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>license-radar reads four of package.json's five dependency fields</h1>
+<p class="meta">By HiroCheck · Published 2026-09-30</p>
+
+<p>npm's <code>package.json</code> has five fields that list a package's
+dependencies: <code>dependencies</code>, <code>devDependencies</code>,
+<code>optionalDependencies</code>, <code>peerDependencies</code>, and
+<code>bundledDependencies</code> (npm also accepts the alternate spelling
+<code>bundleDependencies</code>). The fifth one exists so a package can
+ship its own vendored copies of specific dependencies inside its
+published tarball instead of relying on the installer to fetch them
+separately — a pattern used by packages that need a pinned, private copy
+of something at publish time. <code>license-radar</code>'s
+<code>parse_package_json()</code> reads the first four. It has no code
+path for the fifth, under either spelling.</p>
+
+<h2>The function, as implemented</h2>
+
+<pre><code># license_radar/parsers.py:458-471
+def parse_package_json(path: Path) -> list[str]:
+    data = json.loads(path.read_text())
+    names: list[str] = []
+    # optionalDependencies are installed when available; peerDependencies are
+    # declared as required alongside the package. Both are dependencies the
+    # project declares, so both are in scope for a license-compliance scan.
+    for section in (
+        "dependencies",
+        "devDependencies",
+        "optionalDependencies",
+        "peerDependencies",
+    ):
+        names.extend(data.get(section, {}).keys())
+    return _dedupe(names)</code></pre>
+
+<p>The comment above the loop shows the same reasoning that already
+justified including <code>optionalDependencies</code> and
+<code>peerDependencies</code> — both are "dependencies the project
+declares" and both went into scope. <code>bundledDependencies</code>
+qualifies under that same reasoning: it is one of npm's five documented
+<code>package.json</code> dependency fields, and the packages it lists
+are ordinary registry dependencies that happen to also get bundled into
+the published tarball, not vendored source with no corresponding
+registry package. It just
+isn't in the tuple. There's no filtering logic that excludes it on
+purpose; the field is simply absent from the list of four.</p>
+
+<h2>Reproduced against the unmodified CLI</h2>
+
+<pre><code>$ cat package.json
+{
+  "name": "gap-fixture",
+  "version": "1.0.0",
+  "bundledDependencies": ["pm2"]
+}
+
+$ python3 -m license_radar.cli scan .
+No dependencies found.
+
+OK — no policy violations
+$ echo $?
+0</code></pre>
+
+<p><code>pm2</code> is in <code>license-radar</code>'s own curated
+database as <code>AGPL-3.0</code> — the default policy's own example of
+a strong-copyleft license. The scan reports the same clean "OK" it would
+give an empty project.</p>
+
+<h2>Control: the identical package, one field over</h2>
+
+<p>To confirm the miss is specifically about which field is read — not
+some other difference in the fixture — the same package name, same
+version range, declared under <code>dependencies</code> instead, scans
+exactly as expected:</p>
+
+<pre><code>$ cat package.json
+{
+  "name": "contrast-fixture",
+  "version": "1.0.0",
+  "dependencies": {"pm2": "^5.0.0"}
+}
+
+$ python3 -m license_radar.cli scan .
+[npm] pm2: AGPL-3.0 (strong-copyleft) !!
+
+VIOLATIONS FOUND
+$ echo $?
+1</code></pre>
+
+<p>Same package, same license, same policy — the only variable is which
+of <code>package.json</code>'s five dependency fields it's declared
+under. The alternate spelling npm also accepts,
+<code>bundleDependencies</code> (no "d" after "bundle" — this is not a
+typo, both spellings are documented and both are honored by npm itself),
+scans the same way as the first case: still "No dependencies found. OK".</p>
+
+<h2>Why this is a different gap from the earlier package.json articles</h2>
+
+<p>This blog's earlier <code>npm-legacy-licenses-array-not-read</code>
+article is about a package.json <em>read incorrectly</em> for its own
+declared license (the old <code>licenses</code> array field is never
+consulted). This one is about a project's <em>own</em>
+<code>package.json</code> — the dependency <em>declaration</em>, not the
+dependency's own license metadata — having one of its five standard
+dependency-listing fields skipped entirely by manifest parsing. Neither
+article's fixture or code path overlaps with the other's.</p>
+
+<h2>How this field gets used in practice</h2>
+
+<p><code>bundledDependencies</code> is less common than the other four
+fields, but it is one of npm's five standard, currently-supported
+<code>package.json</code> dependency fields, not a deprecated or
+unofficial one. Packages that vendor a specific, pinned build of a
+native or platform-specific dependency (so the published tarball is
+self-contained and installs without a separate registry fetch for that
+piece) are the field's designed use case. A project relying on it for a
+copyleft-licensed vendored package
+gets no warning that the dependency was never inspected at all — the
+scan output is indistinguishable from a project with zero dependencies.</p>
+
+<h2>Verification</h2>
+
+<pre><code>$ python3 -m pytest tests -q
+124 passed
+
+$ python3 scripts/measure_accuracy.py
+== default policy (strong-copyleft + unknown) ==
+  packages (ground truth): 305  (scanned end-to-end: 305)
+  risky packages       : 13  flagged: 13
+  recall               : 100.00%
+  non-risky packages   : 292
+  false-positive rate  : 0.00%
+
+== strict policy (fail at weak-copyleft) ==
+  packages (ground truth): 305  (scanned end-to-end: 305)
+  risky packages       : 23  flagged: 23
+  recall               : 100.00%
+  non-risky packages   : 282
+  false-positive rate  : 0.00%</code></pre>
+
+<p>No code was changed this session — both commands ran against the
+existing, unmodified checkout. The gap is in <code>package.json</code>
+field coverage, a path the offline accuracy corpus (built from
+directly-discoverable <code>dependencies</code>/<code>devDependencies</code>
+entries) doesn't exercise, so it doesn't move either number. Both
+fixtures above were created and deleted within a temporary directory
+this session, against this session's unmodified
+<code>license_radar.cli</code> — no fabricated output.</p>
+
+<p>A project using <code>bundledDependencies</code> for a copyleft
+package can work around the gap today by also declaring the same
+package under <code>dependencies</code> or <code>optionalDependencies</code>
+(both of which <code>license-radar</code> does read) until the field
+itself is supported.</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

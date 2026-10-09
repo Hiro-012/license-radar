@@ -1,0 +1,11 @@
+# PDM keeps dev-only dependencies (not expressible in PEP 621) under
+# [tool.pdm.dev-dependencies] as groups of PEP 508 requirement strings. A
+# copyleft dev/test dependency declared only here must still be scanned.
+[project]
+name = "pdm-app"
+version = "0.0.0"
+dependencies = ["requests"]
+
+[tool.pdm.dev-dependencies]
+test = ["pytest", "python-levenshtein"]
+lint = ["ruff"]

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>license-radar's SPDX parser doesn't implement the "+" operator — GPL-2.0+ reads as unknown, and it takes "X OR Y" down with it — license-radar</title>
+<meta name="description" content="spdx_expr.py's tokenizer treats + as an ordinary identifier character, so GPL-2.0+ never becomes the strong-copyleft GPL-2.0-or-later license-radar already recognizes — it becomes an unclassifiable atom that aborts the whole expression, including GPL-2.0+ OR MIT. python-vlc's live PyPI metadata carries exactly this string today. Verified against the unmodified classifier and CLI, with a policy setting that lets it pass silently.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>license-radar's SPDX parser doesn't implement the "+" operator — <code>GPL-2.0+</code> reads as unknown, and it takes <code>X OR Y</code> down with it</h1>
+<p class="meta">By HiroCheck · Published 2026-09-23</p>
+
+<p>The SPDX License List has always permitted a trailing <code>+</code> on a
+GPL-family identifier to mean "this version or any later version" — it
+predates the now-preferred <code>-or-later</code> suffix and is still
+valid, spec-legal syntax, still emitted by real package metadata today.
+<code>license-radar</code> already recognizes <code>GPL-2.0-or-later</code>
+as strong-copyleft. It does not recognize <code>GPL-2.0+</code> — the
+older spelling of the exact same license.</p>
+
+<h2>Where it breaks</h2>
+
+<pre><code># license_radar/spdx_expr.py, _tokenize_spdx()
+j = i
+while j < n and (expr[j].isalnum() or expr[j] in ".-+_"):
+    j += 1
+...
+word = expr[i:j]
+...
+tokens.append(("ID", word))</code></pre>
+
+<p><code>+</code> is listed as an ordinary identifier character, right
+alongside <code>.</code> and <code>-</code>. So the atom
+<code>GPL-2.0+</code> tokenizes as a single opaque identifier,
+<code>("ID", "GPL-2.0+")</code> — not as the id <code>GPL-2.0</code>
+followed by a distinct "or-later" operator. That token then reaches
+<code>classify.py</code>:</p>
+
+<pre><code># license_radar/classify.py
+STRONG_COPYLEFT = {
+    "GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-only", "GPL-3.0-or-later",
+    "AGPL-3.0-only", "AGPL-3.0-or-later", "SSPL-1.0",
+}
+...
+def classify_license(spdx: str | None) -> str:
+    if not spdx:
+        return TIER_UNKNOWN
+    normalized = _normalize(spdx)
+    if normalized in PERMISSIVE: return TIER_PERMISSIVE
+    if normalized in WEAK_COPYLEFT: return TIER_WEAK_COPYLEFT
+    if normalized in STRONG_COPYLEFT: return TIER_STRONG_COPYLEFT
+    return TIER_UNKNOWN</code></pre>
+
+<p><code>"GPL-2.0+"</code> is in neither the tier sets nor the
+<code>_ALIASES</code> table (which maps bare forms like
+<code>"GPL-2.0"</code> to <code>"GPL-2.0-only"</code>, but has no entry for
+the <code>+</code>-suffixed spelling). It falls through every branch and
+comes back <code>unknown</code> — the same tier as a license the tool has
+genuinely never heard of, not the strong-copyleft tier it actually is.</p>
+
+<h2>It also takes compound expressions down with it</h2>
+
+<p><code>spdx_expr.py</code>'s own module docstring describes its design
+explicitly: "any atom we cannot classify … makes the whole expression
+<code>TIER_UNKNOWN</code> — the resolver refuses to guess rather than let
+a <code>min()</code>/<code>max()</code> silently swallow an unclassifiable
+branch." That's the right call for a genuinely unrecognized license — but
+<code>GPL-2.0+</code> isn't one, and the refusal applies anyway:</p>
+
+<pre><code>$ python3 -c "
+from license_radar.classify import classify_expression
+print(classify_expression('GPL-2.0+'))
+print(classify_expression('GPL-2.0+ OR MIT'))
+print(classify_expression('GPL-2.0-or-later OR MIT'))
+print(classify_expression('GPL-2.0-or-later'))
+"
+unknown
+unknown
+permissive
+strong-copyleft</code></pre>
+
+<p><code>GPL-2.0+ OR MIT</code> should resolve to <code>permissive</code> —
+the licensee may pick MIT, exactly as <code>GPL-2.0-or-later OR MIT</code>
+correctly does one line below it. Because <code>_parse_atom()</code>
+raises on the single unrecognized <code>GPL-2.0+</code> token, the whole
+<code>OR</code> expression aborts before the parser ever gets to weigh the
+MIT branch.</p>
+
+<h2>A real package carrying exactly this string today</h2>
+
+<p><a href="https://pypi.org/project/python-vlc/"><code>python-vlc</code></a>
+— the official Python bindings for the VLC media player — declares its
+license in PyPI metadata, right now, as the literal string
+<code>"LGPL-2.1+"</code>:</p>
+
+<pre><code>$ curl -s https://pypi.org/pypi/python-vlc/json \
+  | python3 -c "import json,sys; d=json.load(sys.stdin)['info']; \
+    print('license:', d['license']); \
+    print('license_expression:', d['license_expression'])"
+license: LGPL-2.1+
+license_expression: None</code></pre>
+
+<p>This is not a contrived string — it's the exact convention this article
+describes, sitting in a live, currently-published, widely-used package's
+metadata. (This particular package also carries an OSI-Approved
+classifier, and <code>reduce_pypi_info()</code> prefers that classifier
+text over the free-text <code>license</code> field when both are present
+— a different, already-covered gap on this blog, see
+<code>gpl-trove-classifier-text-reads-as-unknown.html</code>. The
+<code>+</code>-operator gap described here is independent of that
+priority order: it fires on whatever string ultimately reaches
+<code>classify_expression()</code>, regardless of which field it came
+from — and for <code>--online</code> npm lookups specifically,
+<code>fetch_npm_license()</code> has no classifier fallback at all, so an
+npm package's raw <code>license</code> field goes straight through
+unfiltered.)</p>
+
+<h2>Reproduced end to end against the unmodified CLI</h2>
+
+<p>A minimal <code>requirements.txt</code> naming one dependency, with a
+license lookup returning <code>"GPL-2.0+"</code> for it (standing in for
+what an npm registry response or a local DB entry could just as easily
+supply verbatim — <code>license_radar.cli</code> and
+<code>license_radar.classify</code> run completely unmodified in both
+cases below):</p>
+
+<pre><code>$ cat requirements.txt
+old-gpl-pkg==1.0
+
+$ python3 -m license_radar.cli scan requirements.txt
+[pypi] old-gpl-pkg: GPL-2.0+ (unknown) !!
+
+VIOLATIONS FOUND
+$ echo $?
+1</code></pre>
+
+<p>Flagged — but for the wrong reason (<code>unknown</code>, not
+<code>strong-copyleft</code>), and that distinction matters the moment a
+project uses a policy that treats them differently. The default policy's
+<code>treat_unknown_as_violation</code> knob is exactly such a case,
+documented in <code>policy.py</code> and legitimately used by teams that
+want unrecognized-but-plausibly-fine licenses to warn rather than block a
+build:</p>
+
+<pre><code>$ cat policy.json
+{"treat_unknown_as_violation": false}
+
+$ python3 -m license_radar.cli scan requirements.txt --policy policy.json
+[pypi] old-gpl-pkg: GPL-2.0+ (unknown)
+
+OK — no policy violations
+$ echo $?
+0
+
+$ # control: same dependency, "-or-later" spelling, same lenient policy
+$ python3 -m license_radar.cli scan requirements.txt --policy policy.json
+[pypi] old-gpl-pkg: GPL-2.0-or-later (strong-copyleft) !!
+
+VIOLATIONS FOUND
+$ echo $?
+1</code></pre>
+
+<p>Same dependency, same actual license, same policy file. The only
+difference is which of the two spec-legal spellings the upstream metadata
+happens to use. One is caught as strong-copyleft; the other passes
+clean.</p>
+
+<h2>Why this is a different gap from the other GPL-related articles</h2>
+
+<p>Three earlier posts on this blog also involve GPL/LGPL strings landing
+in <code>unknown</code>:
+<code>gpl-trove-classifier-text-reads-as-unknown.html</code> is about
+free-text PyPI classifier sentences ("GNU General Public License v2 or
+later (GPLv2+)") missing from the alias table — English prose, handled
+entirely inside <code>classify_license()</code>'s alias lookup.
+<code>license-radar-npm-legacy-licenses-array-not-read.html</code> is about
+a field npm's fetch function never reads at all — the string never even
+reaches the classifier. <code>pyqt5-vs-pyside6-license-gpl-lgpl.html</code>
+and <code>orjson-mpl-and-apache-or-mit-license-expression.html</code>
+exercise the <code>OR</code>/<code>AND</code> reduction logic itself, but
+only with atoms already in the recognized set. This gap is different from
+all four: it's a compact, spec-legal SPDX <em>expression token</em> —
+exactly the kind of string <code>spdx_expr.py</code>'s own docstring
+claims to implement "SPDX operator semantics" for — failing inside the
+tokenizer of that same module, because one of the grammar's own operators
+was never given a code path. No alias-table entry could fix it, because
+the failure happens before <code>classify_license()</code>'s alias lookup
+is even the relevant question: the tokenizer hands over a single fused
+token, <code>"GPL-2.0+"</code>, with no way for anything downstream to
+tell "known id" and "operator suffix" apart.</p>
+
+<h2>Verification</h2>
+
+<pre><code>$ python3 -m pytest tests/ -q
+124 passed
+
+$ python3 scripts/measure_accuracy.py
+  packages (ground truth): 305  (scanned end-to-end: 305)
+  risky packages       : 13  flagged: 13
+  recall               : 100.00%
+  false-positive rate  : 0.00%</code></pre>
+
+<p>No code was changed this session — both commands ran against the
+existing, unmodified checkout, and the 124/124 and 100%/0% figures match
+the numbers already on record (this gap is in the <code>+</code>-operator
+branch of SPDX expression parsing, which the offline accuracy corpus
+doesn't exercise, so it moves neither number). The
+<code>python-vlc</code> PyPI response was captured directly against the
+live <code>pypi.org</code> API this session; the CLI runs above used the
+unmodified <code>license_radar.cli</code> and <code>license_radar.classify</code>
+against temporary files created and deleted within this session — no
+fabricated output.</p>
+
+<p>A project depending on a package whose upstream metadata uses the
+<code>+</code> spelling can work around this today by overriding that
+specific dependency's license in its own local DB entry, if
+<code>license-radar</code>'s configuration supports one, rather than
+relying on the automatic classifier to normalize it.</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

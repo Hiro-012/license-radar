@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>license-radar misses dev-requirements.txt — only the requirements*.txt suffix pattern is scanned — license-radar</title>
+<meta name="description" content="license-radar's manifest discovery matches filenames that start with 'requirements' and end in '.txt'. A common real-world convention — dev-requirements.txt, test-requirements.txt — starts with the qualifier instead, and is silently skipped. Reproduced with a GPL-3.0 dependency that slips through undetected.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>license-radar misses dev-requirements.txt — only the requirements*.txt suffix pattern is scanned</h1>
+<p class="meta">By HiroCheck · Published 2026-09-16</p>
+
+<p>license-radar's manifest discovery recognizes a pip requirements file by
+one rule: the filename must <em>start</em> with <code>requirements</code>
+and <em>end</em> with <code>.txt</code>. That covers
+<code>requirements.txt</code> and <code>requirements-dev.txt</code> fine.
+It does not cover the equally common naming convention where the qualifier
+comes first — <code>dev-requirements.txt</code>,
+<code>test-requirements.txt</code> — and those files are skipped
+entirely, with no warning.</p>
+
+<h2>The matching rule, as implemented</h2>
+
+<pre><code># license_radar/parsers.py
+def _matches_manifest(name: str) -> tuple[str, object] | None:
+    ...
+    if name.startswith("requirements") and name.endswith(".txt"):
+        return "pypi", parse_requirements_txt
+    return None</code></pre>
+
+<p>Checked directly against both naming conventions:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar.parsers import _matches_manifest
+&gt;&gt;&gt; _matches_manifest("requirements-dev.txt")
+('pypi', &lt;function parse_requirements_txt at 0x...&gt;)
+&gt;&gt;&gt; _matches_manifest("dev-requirements.txt")
+None
+&gt;&gt;&gt; _matches_manifest("test-requirements.txt")
+None</code></pre>
+
+<h2>Reproduced with a real violation</h2>
+
+<p>A project with a normal-looking dependency split — runtime deps in
+<code>requirements.txt</code>, dev/test tooling in
+<code>dev-requirements.txt</code> — where the dev file happens to pull in
+a GPL-3.0 package (a common way this actually happens: a test harness or
+internal tool depends on a GPL-licensed library, and nobody treats a
+"dev-only" dependency as a license question):</p>
+
+<pre><code>$ cat requirements.txt
+requests==2.31.0
+flask==3.0.0
+
+$ cat dev-requirements.txt
+pyqt5==5.15.9
+pytest==7.4.0
+
+$ license-radar scan .
+[pypi] requests: Apache-2.0 (permissive)
+[pypi] flask: BSD-3-Clause (permissive)
+
+OK — no policy violations</code></pre>
+
+<p><code>pyqt5</code> (GPL-3.0-only, license-radar's own database entry) is
+never scanned — the file it lives in was never discovered, so it never
+even reaches the classification step. Renaming the exact same file to the
+suffix-style convention the matcher does recognize changes the outcome
+completely, with no other change to its contents:</p>
+
+<pre><code>$ mv dev-requirements.txt requirements-dev.txt
+$ license-radar scan .
+[pypi] pyqt5: GPL-3.0-only (strong-copyleft) !!
+[pypi] pytest: MIT (permissive)
+[pypi] requests: Apache-2.0 (permissive)
+[pypi] flask: BSD-3-Clause (permissive)
+
+VIOLATIONS FOUND</code></pre>
+
+<p>Same dependency, same license, same default policy
+(<code>treat_unknown_as_violation</code> doesn't even come into play here —
+<code>pyqt5</code> classifies cleanly to <code>strong-copyleft</code>).
+The only variable is which side of the word "requirements" the qualifier
+sits on.</p>
+
+<h2>This isn't a rare naming choice</h2>
+
+<p>There's no PEP or pip specification for how to name a secondary
+requirements file — the convention is purely community habit, and the
+community didn't converge on one order. Real, currently-maintained
+projects use the prefix form directly:
+<a href="https://github.com/zhmcclient/python-zhmcclient/blob/master/dev-requirements.txt">zhmcclient's
+<code>dev-requirements.txt</code></a> is a working example, not a
+hypothetical one. Searches on the convention consistently turn up both
+orderings in active use with no indication either has become standard —
+which means a scanner that only recognizes one of the two orderings will
+have a real, non-trivial false-negative rate across the ecosystem it
+claims to cover, not just a theoretical edge case.</p>
+
+<h2>What this does and doesn't affect</h2>
+
+<p>The three other supported pip manifest formats —
+<code>pyproject.toml</code>, <code>setup.py</code>, <code>setup.cfg</code> —
+match on exact, fixed filenames with no prefix/suffix ambiguity, so this
+gap is specific to the free-form <code>requirements*.txt</code> naming
+space. <code>Pipfile</code> and <code>package.json</code> are likewise
+exact-name matches and unaffected. A project that declares all of its
+dependencies — including dev/test tooling — in
+<code>pyproject.toml</code>'s <code>[dependency-groups]</code> or
+<code>[tool.poetry.group.*.dependencies]</code> (both already handled,
+see license-radar's earlier coverage of Poetry and PEP 735 dependency
+groups) sidesteps this entirely; the gap only bites projects that still
+split dependencies across loosely-named <code>.txt</code> files, which is
+most of the pip ecosystem that predates <code>pyproject.toml</code>
+becoming common.</p>
+
+<h2>Verification</h2>
+
+<pre><code>$ python3 -m pytest license_radar/../tests -q
+121 passed</code></pre>
+
+<p>No code change was made in this session — the gap is a discovery-content
+finding, not a fix, and the existing test suite (121 passed) reflects
+that: none of the fixtures exercise a prefix-style requirements filename,
+so this session's finding doesn't move that number. Note that pointing the
+CLI directly at the file does <em>not</em> work around this — the same
+filename gate applies whether the scan target is a directory or a single
+path:</p>
+
+<pre><code>$ license-radar scan dev-requirements.txt
+No dependencies found.
+
+OK — no policy violations</code></pre>
+
+<p>The only reliable workaround today is to rename the file to a
+recognized <code>requirements*.txt</code> pattern (e.g.
+<code>requirements-dev.txt</code>) before scanning, or to call the parser
+function directly from Python, bypassing filename matching entirely:</p>
+
+<pre><code>&gt;&gt;&gt; from pathlib import Path
+&gt;&gt;&gt; from license_radar.parsers import parse_requirements_txt
+&gt;&gt;&gt; from license_radar import license_db, classify
+&gt;&gt;&gt; names = parse_requirements_txt(Path("dev-requirements.txt"))
+&gt;&gt;&gt; [(n, classify.classify_expression(license_db.lookup("pypi", n))) for n in names]
+[('pyqt5', 'strong-copyleft'), ('pytest', 'permissive')]</code></pre>
+
+<pre><code>pip install license-radar
+license-radar scan requirements-dev.txt</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

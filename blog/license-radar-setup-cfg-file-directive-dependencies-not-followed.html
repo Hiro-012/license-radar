@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>license-radar reads setup.cfg's install_requires — but not when it points at a file. GPL/AGPL deps behind that pattern scan clean — license-radar</title>
+<meta name="description" content="setuptools' setup.cfg supports install_requires = file: requirements/base.txt to load the dependency list from another file. license_radar._split_cfg_list() recognizes the file: prefix only well enough to skip the line — it never opens the referenced file. Compounded by manifest discovery matching requirements files by bare filename, a project using this common layout scans as 'No dependencies found. OK' even with a GPL-3.0 package declared.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>license-radar reads setup.cfg's install_requires — but not when it points at a file</h1>
+<p class="meta">By HiroCheck · Published 2026-09-26</p>
+
+<p>setuptools supports declaring a package's dependencies in
+<code>setup.cfg</code> two ways: inline, one requirement per line, or by
+pointing at another file — <code>install_requires = file:
+requirements/base.txt</code> — so the same requirements file can be
+shared between <code>pip install -r</code> and packaging metadata. It's a
+common layout in projects that keep a <code>requirements/</code>
+directory split into <code>base.txt</code>, <code>dev.txt</code>,
+<code>prod.txt</code>, etc. <code>license-radar</code>'s README says it
+reads <code>setup.cfg</code>'s <code>install_requires</code>. It does —
+right up until the value is a <code>file:</code> reference, at which
+point it silently drops the line instead of following it.</p>
+
+<h2>The function, as implemented</h2>
+
+<pre><code># license_radar/parsers.py
+def _split_cfg_list(value: str) -> list[str]:
+    """Split a setup.cfg list-valued option into individual requirement lines.
+
+    setuptools stores install_requires / extras_require entries one per
+    line. A leading file: directive (setuptools reads the list from another
+    file) is not a requirement and is skipped.
+    """
+    lines = []
+    for raw in value.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("file:"):
+            continue
+        lines.append(line)
+    return lines</code></pre>
+
+<p>The docstring is accurate about what the code does — it just means the
+dependency list setuptools would actually install is never read at all.
+There is no code path anywhere in <code>parse_setup_cfg()</code> that
+opens the file named after <code>file:</code>, unlike the tool's own
+handling of pip's <code>-r other.txt</code> include syntax in
+<code>requirements.txt</code>, which it does follow.</p>
+
+<h2>Not fixed by renaming the file, either</h2>
+
+<p>Even setting the <code>file:</code> indirection aside, the referenced
+file would still need to be independently discoverable for
+<code>license-radar</code> to have any chance of scanning it on its own,
+and the filenames this <code>setup.cfg</code> pattern is normally used
+with — <code>base.txt</code>, <code>prod.txt</code>, <code>dev.txt</code> —
+don't start with <code>requirements</code>, so
+<code>_matches_manifest()</code>'s <code>requirements*.txt</code> rule
+(the same prefix-only rule covered by this blog's earlier
+<code>dev-requirements.txt</code> article) wouldn't pick them up even if
+someone thought to check. That's a compounding, not incidental, detail:
+this <code>file:</code> gap can't be worked around by simply relying on
+independent discovery of the target file, because the file it names is
+exactly the kind of name that discovery already misses.</p>
+
+<h2>Reproduced against the unmodified CLI</h2>
+
+<pre><code>$ cat setup.cfg
+[metadata]
+name = myproject
+version = 1.0.0
+
+[options]
+packages = find:
+install_requires = file: requirements/base.txt
+
+$ cat requirements/base.txt
+requests==2.31.0
+pyqt5==5.15.9
+
+$ python3 -m license_radar.cli scan .
+No dependencies found.
+
+OK — no policy violations
+$ echo $?
+0
+
+$ python3 -m license_radar.cli scan . --json
+{
+  "findings": [],
+  "violation": false
+}
+$ echo $?
+0</code></pre>
+
+<p><code>pyqt5</code> is in <code>license-radar</code>'s own curated
+database as <code>GPL-3.0-only</code> — a strong-copyleft license the
+default policy is specifically built to catch. The scan reports the same
+clean "OK" it would give an empty project.</p>
+
+<h2>Control: the identical dependency list, discoverable</h2>
+
+<p>To confirm the miss is specifically about the <code>file:</code>
+indirection and the discovery pattern — not some other difference —
+the same two lines, saved directly as a top-level
+<code>requirements.txt</code> instead of behind
+<code>setup.cfg</code>'s <code>file:</code> reference, scan exactly as
+expected:</p>
+
+<pre><code>$ cat requirements.txt
+requests==2.31.0
+pyqt5==5.15.9
+
+$ python3 -m license_radar.cli scan .
+[pypi] requests: Apache-2.0 (permissive)
+[pypi] pyqt5: GPL-3.0-only (strong-copyleft) !!
+
+VIOLATIONS FOUND
+$ echo $?
+1</code></pre>
+
+<p>Same package, same declared version, same policy — the only variable
+is whether <code>license-radar</code>'s manifest-discovery and
+<code>setup.cfg</code>-parsing code path ever sees it.</p>
+
+<h2>Why this is a different gap from the earlier "no recognized manifest" article</h2>
+
+<p>An earlier article on this blog
+(<code>license-radar-no-recognized-manifest-still-reports-ok.html</code>)
+covers a project with no manifest <code>license-radar</code> recognizes
+at all — there is nothing for <code>discover_manifests()</code> to find,
+by design of that example. Here, <code>setup.cfg</code> itself is a
+manifest the tool fully recognizes and does parse; it's one specific,
+common way of writing <code>install_requires</code> inside that already-supported
+file that silently produces zero dependencies instead of an error or a
+partial result.</p>
+
+<h2>How common this layout is</h2>
+
+<p>Splitting requirements into a <code>requirements/</code> directory
+(<code>base.txt</code> plus environment-specific overlays) predates and
+coexists with the newer <code>pyproject.toml</code> convention, and
+<code>setup.cfg</code>'s <code>file:</code> directive exists specifically
+to let a <code>setup.cfg</code>-based package point at that same shared
+file rather than duplicate it inline. Any project using this
+combination — common in the years <code>setup.cfg</code> was setuptools'
+recommended declarative format — has its entire dependency list invisible
+to a <code>license-radar</code> scan, with no warning that anything was
+skipped.</p>
+
+<h2>Verification</h2>
+
+<pre><code>$ python3 -m pytest tests -q
+124 passed
+
+$ python3 scripts/measure_accuracy.py
+  packages (ground truth): 305  (scanned end-to-end: 305)
+  risky packages       : 13  flagged: 13
+  recall               : 100.00%
+  non-risky packages   : 292
+  false-positive rate  : 0.00%</code></pre>
+
+<p>No code was changed this session — both commands ran against the
+existing, unmodified checkout. This gap is in manifest discovery and
+<code>setup.cfg</code> parsing, a path the offline accuracy corpus (which
+uses directly-discoverable manifests) doesn't exercise, so it doesn't
+move either number. The <code>setup.cfg</code>/<code>requirements/base.txt</code>
+fixture and the CLI runs above were created and deleted within a
+temporary directory this session, against this session's unmodified
+<code>license_radar.cli</code> — no fabricated output.</p>
+
+<p>A project using this <code>setup.cfg</code> layout can work around the
+gap today by also keeping a directly-discoverable
+<code>requirements*.txt</code> at the project root (even a thin one using
+pip's <code>-r</code> include, which <code>license-radar</code> does
+follow) until the <code>file:</code> directive itself is supported.</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

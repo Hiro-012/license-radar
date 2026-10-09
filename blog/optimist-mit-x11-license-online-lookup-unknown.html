@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>npm's registry says optimist is "MIT/X11". license-radar's --online scan calls it unknown — license-radar</title>
+<meta name="description" content="A real npm package's registry metadata still carries the pre-SPDX slash notation 'MIT/X11'. license-radar's --online remote-lookup path can't resolve it to a tier and falls back to 'unknown' rather than a false permissive verdict — verified against the live npm registry and license-radar's own classifier, no changes made to the code.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>npm's registry says optimist is "MIT/X11". license-radar's --online scan calls it unknown</h1>
+<p class="meta">By HiroCheck · Published 2026-09-12</p>
+
+<p><a href="https://www.npmjs.com/package/optimist">optimist</a> — the
+argument-parsing library that predates and inspired yargs, still published
+and still installable as a transitive dependency of older tooling — carries
+a license string in npm's own registry metadata that predates npm's move to
+plain SPDX identifiers:</p>
+
+<pre><code>curl -s https://registry.npmjs.org/optimist | python3 -c \
+  "import json,sys; d=json.load(sys.stdin); \
+   v=d['versions'][d['dist-tags']['latest']]; \
+   print(v['license'])"
+# -> MIT/X11</code></pre>
+
+<p>That is the actual, current value in the live registry for optimist's
+latest published version (0.6.1) — not a synthetic test fixture. It comes
+from an era before npm standardized the <code>license</code> field on a
+single SPDX identifier: an older convention wrote the license as two names
+joined by a slash, on the understanding that they name the same permissive
+terms under two different historical labels.</p>
+
+<h2>What license-radar does with it</h2>
+
+<p><a href="https://pypi.org/project/license-radar/">license-radar</a>'s
+static package database doesn't carry an entry for optimist, so a
+<code>--online</code> scan is the only way it learns optimist's license at
+all — it falls through to a live registry lookup
+(<code>license_radar/remote.py</code>) exactly as designed. Feeding the
+registry's own answer back through license-radar's classifier reproduces
+the gap directly, end to end, no mocking:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar.remote import fetch_npm_license
+&gt;&gt;&gt; from license_radar.scanner import scan_manifest
+&gt;&gt;&gt; fetch_npm_license("optimist")
+'MIT/X11'
+&gt;&gt;&gt; scan_manifest(Path("package.json"), online=True)   # deps: {"optimist": "^0.6.1"}
+[Finding(ecosystem='npm', package='optimist', license='MIT/X11', tier='unknown')]</code></pre>
+
+<p>Two independent paths inside <code>classify.py</code> both decline to
+resolve the string, and both do it for defensible reasons rather than by
+accident:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar.classify import classify_license, classify_expression
+&gt;&gt;&gt; classify_license("MIT/X11")
+'unknown'      # not in PERMISSIVE, not in the free-text _ALIASES map either
+&gt;&gt;&gt; classify_expression("MIT/X11")
+'unknown'      # falls back to the SPDX-expression parser, which also fails
+</code></pre>
+
+<p>The free-text alias table only has an exact-match entry for
+<code>"MIT LICENSE"</code>, not the slash form. And the SPDX-expression
+resolver's tokenizer (<code>spdx_expr.py</code>) treats <code>/</code> as a
+character outside the SPDX-expression grammar — the same rule that makes
+any stray punctuation abort the whole expression rather than let the parser
+guess at a partial match — so <code>"MIT/X11"</code> is rejected as a
+tokenization failure before either half of it is even inspected as a
+license id.</p>
+
+<h2>Why this isn't a false permissive verdict</h2>
+
+<p>Nothing here lets a copyleft obligation slip through unflagged. Both
+code paths refuse to guess and land on <code>unknown</code> — the same
+conservative outcome the SPDX expression resolver already documents for
+any unrecognized atom (see the
+<a href="./openjdk-gpl-classpath-exception.html">earlier post</a> on the
+<code>WITH</code> operator, which fails the same direction on purpose). The
+practical cost is precision, not safety: a policy that treats
+<code>unknown</code> as requiring manual review (license-radar's own
+default policy does exactly this) will flag optimist for a human to look
+at, even though the package is, by every account other than this one
+slash character, an ordinary permissive dependency. At scan-report scale,
+that's exactly the kind of package a reviewer learns to skim past — which
+is the actual cost of a spurious "unknown": not a wrong verdict, but noise
+that erodes trust in the verdicts that matter.</p>
+
+<h2>Scope of this finding</h2>
+
+<p>This is specific to the <code>--online</code> remote-lookup fallback,
+which only activates for a dependency absent from license-radar's curated
+static DB. The default (offline) scan path — DB lookup only, no network
+call — never reaches <code>fetch_npm_license</code> and is entirely
+unaffected. No code was changed for this post, and none of the accuracy
+corpus concerns optimist or the <code>--online</code> path, so the existing
+measured numbers are unchanged: full suite <strong>121 passed</strong>
+(<code>pytest -q</code>, repository root, including the newly-verified
+<code>test_packaging.py</code> invariants), and the default-policy accuracy
+harness reports <strong>recall 100% (13/13 known-risky packages caught)</strong>
+and <strong>false-positive rate 0% (0/292 non-risky packages)</strong>
+(<code>scripts/measure_accuracy.py</code>, run directly against the current
+305-package curated DB).</p>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

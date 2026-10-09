@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pyproject.toml can say "dependencies live in this other file." license-radar never opens it — license-radar</title>
+<meta name="description" content="PEP 621 lets a project mark [project] dependencies as dynamic and source them from another file via [tool.setuptools.dynamic]. license_radar.parsers.parse_pyproject_toml() reads project.dependencies as a literal list but never resolves tool.setuptools.dynamic, and the referenced file rarely matches the requirements*.txt name discover_manifests() looks for. A project using this layout scans as 'No dependencies found. OK' even with a GPL-3.0 package declared.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>pyproject.toml can say "dependencies live in this other file." license-radar never opens it</h1>
+<p class="meta">By HiroCheck · Published 2026-09-28</p>
+
+<p>PEP 621 lets a <code>pyproject.toml</code> declare that
+<code>[project] dependencies</code> is <code>dynamic</code> — computed
+rather than listed inline — and setuptools' own
+<code>[tool.setuptools.dynamic]</code> table is the standard way to say
+where from: <code>dependencies = {file = ["requirements/prod.in"]}</code>
+tells setuptools (and <code>pip install</code>, and PyPI's own metadata
+build) to read the real list from that file at build time. It's
+documented setuptools behavior, not a niche trick, and it exists for the
+same reason <code>setup.cfg</code>'s older <code>install_requires = file:
+...</code> directive does: share one requirements file between
+<code>pip install -r</code> and packaging metadata without duplicating
+it. <code>license-radar</code>'s own README says it reads
+<code>pyproject.toml</code>. It does — but only the case where
+dependencies are listed directly in the file, not the case where the file
+says "look elsewhere."</p>
+
+<h2>The function, as implemented</h2>
+
+<pre><code># license_radar/parsers.py
+def parse_pyproject_toml(path: Path) -> list[str]:
+    data = tomllib.loads(path.read_text())
+    names: list[str] = []
+
+    project = data.get("project", {})
+
+    # PEP 621 core dependencies.
+    _add_req_strings(names, project.get("dependencies", []))
+    ...</code></pre>
+
+<p><code>project.get("dependencies", [])</code> is exactly correct for
+the common case — a literal array of PEP 508 strings. But when
+<code>dynamic = ["dependencies"]</code> is set, PEP 621 requires
+<code>project.dependencies</code> to be *absent* (a build backend must
+reject a <code>pyproject.toml</code> that has it both ways). So this line
+reads an empty list, and nothing anywhere in
+<code>parse_pyproject_toml()</code> looks at
+<code>tool.setuptools.dynamic</code> — the table that actually names
+where the dependencies live. The Poetry, PDM, Hatch and PEP 735 sections
+that follow it in the same function all read requirements straight out of
+<code>pyproject.toml</code> itself; none of them, and no other code path
+in the module, ever opens a file that <code>tool.setuptools.dynamic</code>
+points at.</p>
+
+<h2>Not fixed by independent discovery, either</h2>
+
+<p>Even setting the indirection aside, the referenced file would need to
+be independently discoverable on its own for <code>license-radar</code>
+to have any chance of seeing it, and the whole point of the
+<code>file</code> directive is to point at whatever requirements layout a
+project already uses — <code>requirements/prod.in</code>,
+<code>requirements/base.txt</code> split from a set of environment
+overlays, or any other name a team picked before adopting
+<code>pyproject.toml</code>. Only a file whose name happens to start with
+<code>requirements</code> and end in <code>.txt</code> is picked up by
+<code>_matches_manifest()</code>'s <code>requirements*.txt</code> rule;
+this blog's earlier <code>setup.cfg</code> <code>file:</code> article
+found the same compounding shape with the same rule. A team that named
+its shared file <code>requirements/prod.in</code> — a real, common
+extension for a file that's <code>-r</code>-included rather than
+installed directly — gets nothing from either code path.</p>
+
+<h2>Reproduced against the unmodified CLI</h2>
+
+<pre><code>$ cat pyproject.toml
+[project]
+name = "demo-app"
+version = "0.1.0"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements/prod.in"]}
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+$ cat requirements/prod.in
+PyQt5>=5.15
+requests>=2.0
+
+$ python3 -m license_radar.cli scan .
+No dependencies found.
+
+OK — no policy violations
+$ echo $?
+0</code></pre>
+
+<p><code>PyQt5</code> is in <code>license-radar</code>'s own curated
+database as <code>GPL-3.0-only</code> — a strong-copyleft license the
+default policy exists specifically to catch. The scan reports the same
+clean "OK" it would give an empty project, with no warning that
+<code>dynamic</code> dependencies exist at all.</p>
+
+<h2>Control: the identical file, discoverable</h2>
+
+<p>To confirm the miss is specifically about the indirection and the
+naming pattern — not some other difference — renaming the exact same
+file to a name <code>discover_manifests()</code> does recognize scans
+exactly as expected:</p>
+
+<pre><code>$ cp requirements/prod.in requirements/requirements.txt
+$ python3 -m license_radar.cli scan .
+[pypi] PyQt5: GPL-3.0-only (strong-copyleft) !!
+[pypi] requests: Apache-2.0 (permissive)
+
+VIOLATIONS FOUND
+$ echo $?
+1</code></pre>
+
+<p>Same package, same declared version, same policy — the only variable
+is whether <code>license-radar</code>'s <code>pyproject.toml</code>
+parsing and manifest-discovery code paths ever see the file the project
+actually installs from.</p>
+
+<h2>Why this is a different gap from the setup.cfg article</h2>
+
+<p>The earlier article on this blog
+(<code>license-radar-setup-cfg-file-directive-dependencies-not-followed.html</code>)
+covers the same *shape* of bug — a manifest pointing at another file
+instead of listing dependencies inline — but in <code>setup.cfg</code>,
+a format <code>parse_setup_cfg()</code> already partially recognizes the
+<code>file:</code> keyword for (only to skip it). Here the manifest is
+<code>pyproject.toml</code>, the mechanism is PEP 621's newer
+<code>dynamic</code> field paired with setuptools'
+<code>[tool.setuptools.dynamic]</code> table, and
+<code>parse_pyproject_toml()</code> has no awareness of either — it
+doesn't even recognize the keyword the way <code>_split_cfg_list()</code>
+recognizes (and skips) <code>file:</code>. Any project that migrated from
+<code>setup.cfg</code> to <code>pyproject.toml</code> while keeping a
+split <code>requirements/</code> layout — a common migration path, since
+<code>dynamic</code> exists precisely to ease that transition without
+inlining dependencies — carries this exact gap forward into the newer
+format.</p>
+
+<h2>Verification</h2>
+
+<pre><code>$ python3 -m pytest tests -q
+124 passed
+
+$ python3 scripts/measure_accuracy.py
+  packages (ground truth): 305  (scanned end-to-end: 305)
+  risky packages       : 13  flagged: 13
+  recall               : 100.00%
+  non-risky packages   : 292
+  false-positive rate  : 0.00%</code></pre>
+
+<p>No code was changed this session — both commands ran against the
+existing, unmodified checkout. This gap is in
+<code>pyproject.toml</code> parsing and manifest discovery, a path the
+offline accuracy corpus (which uses directly-discoverable manifests)
+doesn't exercise, so it doesn't move either number. The
+<code>pyproject.toml</code>/<code>requirements/prod.in</code> fixture and
+the CLI runs above were created and deleted within a temporary directory
+this session, against this session's unmodified
+<code>license_radar.cli</code> — no fabricated output.</p>
+
+<p>A project using this layout can work around the gap today by also
+keeping a directly-discoverable <code>requirements*.txt</code> at the
+project root (even a thin one using pip's <code>-r</code> include, which
+<code>license-radar</code> does follow) until
+<code>tool.setuptools.dynamic</code> itself is supported.</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

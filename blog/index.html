@@ -1,9 +1,9 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>license-radar blog — notes on dependency license compliance</title>
-<meta name="description" content="Technical notes from HiroCheck on open-source dependency license compliance — the issues license-radar catches, and why they matter.">
+<title>license-radar blog &mdash; notes on dependency license compliance</title>
+<meta name="description" content="Technical notes from HiroCheck on open-source dependency license compliance &mdash; the issues license-radar catches, and why they matter.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
@@ -20,12 +20,72 @@
 <h1>license-radar blog</h1>
 <p class="tagline">Notes on the dependency license issues license-radar catches, and why they matter.</p>
 <div class="post">
+  <h2><a href="./license-radar-npm-bundled-dependencies-not-read.html">license-radar reads four of package.json&#x27;s five dependency fields</a></h2>
+  <p>dependencies, devDependencies, optionalDependencies and peerDependencies are all read — bundledDependencies (or bundleDependencies) isn&#x27;t, so an AGPL-3.0 package declared only there scans as “No dependencies found. OK”.</p>
+</div>
+<div class="post">
   <h2><a href="./gpl-agpl-dependency-license-risk.html">How a GPL or AGPL dependency becomes a legal problem</a></h2>
-  <p>Real cases — the BusyBox GPL-enforcement lawsuits and MongoDB's move to SSPL — and how the same risk arrives through an unreviewed transitive dependency.</p>
+  <p>Real cases — the BusyBox GPL-enforcement lawsuits and MongoDB&#x27;s move to SSPL — and how the same risk arrives through an unreviewed transitive dependency.</p>
 </div>
 <div class="post">
   <h2><a href="./chardet-license-lgpl-to-0bsd.html">What license is chardet actually under? It depends which version you pinned</a></h2>
-  <p>chardet relicensed from LGPL-2.1-or-later to 0BSD partway through its release history — a real case where a license scanner keyed only by package name can't give one correct answer.</p>
+  <p>chardet relicensed from LGPL-2.1-or-later to 0BSD partway through its release history — a real case where a license scanner keyed only by package name can&#x27;t give one correct answer.</p>
+</div>
+<div class="post">
+  <h2><a href="./openjdk-gpl-classpath-exception.html">OpenJDK is GPL-licensed. So why can you ship it inside closed-source software?</a></h2>
+  <p>GPL-2.0 WITH Classpath-exception-2.0 — the license clause behind OpenJDK and core Java libraries that lets them link into proprietary code, and why the SPDX “WITH” operator trips up scanners built only for plain GPL.</p>
+</div>
+<div class="post">
+  <h2><a href="./redis-python-package-license-vs-redis-server-license.html">license-radar says “redis” is MIT. The Redis server hasn&#x27;t been under one license since 2024</a></h2>
+  <p>The redis/ioredis client packages are correctly MIT — but the Redis database itself moved from BSD to SSPL/RSALv2 in 2024 and added AGPLv3 in 2025. Why no dependency-manifest scanner can see that gap.</p>
+</div>
+<div class="post">
+  <h2><a href="./unlicensed-vs-unlicense-opposite-meanings.html">“Unlicense” and “UNLICENSED” look like the same word. license-radar treats them as opposites</a></h2>
+  <p>Unlicense is a real, OSI-approved, public-domain-equivalent SPDX license. UNLICENSED is npm&#x27;s own convention for “no rights granted at all.” Even Solidity&#x27;s own compiler docs have pointed developers at the wrong one.</p>
+</div>
+<div class="post">
+  <h2><a href="./pyqt5-vs-pyside6-license-gpl-lgpl.html">PyQt5 and PySide6 wrap the same Qt library under different licenses</a></h2>
+  <p>PyQt5 has no LGPL option — GPLv3 or a paid Riverbank commercial license, full stop. PySide6 ships under LGPLv3 with GPL fallbacks. license-radar&#x27;s SPDX OR-expression resolver correctly tiers them as strong-copyleft and weak-copyleft, verified against both packages&#x27; live PyPI metadata.</p>
+</div>
+<div class="post">
+  <h2><a href="./tqdm-mpl-and-mit-license-expression.html">tqdm shows up as MIT everywhere. Its own LICENCE file says MPL-2.0 AND MIT</a></h2>
+  <p>tqdm carries no PyPI license classifier at all and a compound “MPL-2.0 AND MIT” metadata expression — not the plain MIT most sites assume. Why AND isn&#x27;t a rounding error, and how a scanner that mishandles compound expressions gets it wrong either way.</p>
+</div>
+<div class="post">
+  <h2><a href="./orjson-mpl-and-apache-or-mit-license-expression.html">PyPI lists orjson under three OSI licenses. AND makes sure only one of them actually binds</a></h2>
+  <p>orjson&#x27;s classifiers list Apache, MIT and MPL with no structure between them; its real license_expression is the nested “MPL-2.0 AND (Apache-2.0 OR MIT)” — the exact case license-radar&#x27;s expression resolver cites as its motivating example.</p>
+</div>
+<div class="post">
+  <h2><a href="./optimist-mit-x11-license-online-lookup-unknown.html">npm&#x27;s registry says optimist is “MIT/X11”. license-radar&#x27;s --online scan calls it unknown</a></h2>
+  <p>A real, currently-published npm package still carries the pre-SPDX slash notation in its own registry metadata. Neither license-radar&#x27;s free-text alias table nor its SPDX-expression tokenizer resolves it, so the --online fallback path lands on unknown rather than a false permissive verdict.</p>
+</div>
+<div class="post">
+  <h2><a href="./gpl-trove-classifier-text-reads-as-unknown.html">PyPI&#x27;s own GPL classifier text says “GNU General Public License” in plain words — license-radar reads it as unknown</a></h2>
+  <p>mysql-connector-python has no license_expression on PyPI, so license-radar&#x27;s --online mode falls back to its classifier text. That exact string resolves to unknown instead of strong-copyleft, because the alias table only recognizes compact SPDX-style spellings.</p>
+</div>
+<div class="post">
+  <h2><a href="./dev-requirements-txt-prefix-naming-not-discovered.html">license-radar misses dev-requirements.txt — only the requirements*.txt suffix pattern is scanned</a></h2>
+  <p>Manifest discovery recognizes a filename only if it starts with “requirements” and ends in “.txt”. dev-requirements.txt and test-requirements.txt — a real, actively-used naming convention — start with the qualifier instead, and are never discovered.</p>
+</div>
+<div class="post">
+  <h2><a href="./license-radar-no-recognized-manifest-still-reports-ok.html">license-radar scans Python and npm manifests. A Go or Conda-only repo gets “OK — no policy violations” too</a></h2>
+  <p>Manifest discovery matches six exact Python/npm filenames only, as documented. A directory with none of them prints “No dependencies found” then “OK — no policy violations”, exit code 0: indistinguishable from a repo that was actually scanned clean.</p>
+</div>
+<div class="post">
+  <h2><a href="./license-radar-npm-legacy-licenses-array-not-read.html">license-radar&#x27;s --online npm lookup only reads the modern “license” field. Pre-2013 packages used “licenses” instead</a></h2>
+  <p>Packages that predate npm&#x27;s 2013 license-field migration carry their only license info in the legacy plural “licenses” array, which the lookup never reads. A real MIT package comes back UNKNOWN and trips a policy violation.</p>
+</div>
+<div class="post">
+  <h2><a href="./license-radar-spdx-plus-or-later-operator-not-implemented.html">license-radar&#x27;s SPDX parser doesn&#x27;t implement the “+” operator</a></h2>
+  <p>spdx_expr.py&#x27;s tokenizer treats + as an ordinary identifier character, so GPL-2.0+ never becomes the strong-copyleft GPL-2.0-or-later license-radar already recognizes — it becomes an unclassifiable atom that aborts the whole expression, including compound OR expressions.</p>
+</div>
+<div class="post">
+  <h2><a href="./license-radar-setup-cfg-file-directive-dependencies-not-followed.html">license-radar reads setup.cfg&#x27;s install_requires — but not when it points at a file</a></h2>
+  <p>setuptools&#x27; setup.cfg supports install_requires = file: requirements/base.txt to load the dependency list from another file. license-radar recognizes the file: prefix only well enough to skip the line — it never opens the referenced file.</p>
+</div>
+<div class="post">
+  <h2><a href="./license-radar-pyproject-dynamic-dependencies-file-not-followed.html">pyproject.toml can say “dependencies live in this other file.” license-radar never opens it</a></h2>
+  <p>PEP 621 lets a project mark [project] dependencies as dynamic and source them from another file. license-radar reads project.dependencies as a literal list but never resolves the dynamic reference, so a project using this layout scans clean even with a GPL-3.0 package declared.</p>
 </div>
 <footer>
   <p>By HiroCheck. See also <a href="../index.html">license-radar</a>.</p>

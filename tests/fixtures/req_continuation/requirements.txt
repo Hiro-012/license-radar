@@ -1,0 +1,15 @@
+# A requirement whose environment marker is split across a backslash line
+# continuation. pip joins these into one logical line; parsing physical lines
+# would mis-read the marker's leading word ("and") as a package.
+pysdl2==0.9 ; python_version >= "3.8" \
+    and platform_system == "Linux"
+
+# A hash-pinned requirement continued over several lines (the common case).
+# Only the leading package name (foolib) is a dependency; the --hash options
+# on the continuation lines are not.
+foolib==1.2.3 \
+    --hash=sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+    --hash=sha256:2222222222222222222222222222222222222222222222222222222222222222
+
+# A plain requirement, no continuation, to anchor the set.
+requests==2.31.0

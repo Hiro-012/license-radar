@@ -1,0 +1,22 @@
+# Hatch keeps a project's dev/test/lint dependencies under
+# [tool.hatch.envs.<name>] tables, as PEP 508 requirement strings in two keys:
+# `dependencies` (the env's full set) and `extra-dependencies` (added on top of
+# the project's own). A copyleft dependency declared only in a Hatch env
+# (python-levenshtein is GPL) must still be scanned. Non-list keys in an env
+# table (here `scripts`) are not requirement lists and must be ignored.
+[project]
+name = "hatch-app"
+version = "0.0.0"
+dependencies = ["requests"]
+
+[tool.hatch.envs.default]
+dependencies = ["pytest", "coverage[toml]"]
+
+[tool.hatch.envs.test]
+extra-dependencies = ["python-levenshtein"]
+
+[tool.hatch.envs.lint]
+dependencies = ["ruff"]
+
+[tool.hatch.envs.lint.scripts]
+check = "ruff check ."

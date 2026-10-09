@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PyQt5 and PySide6 wrap the same Qt library under different licenses — and license-radar's OR-expression logic tells them apart</title>
+<meta name="description" content="pip install PyQt5 or pip install PySide6 both give you Qt bindings, but PyQt5 has no LGPL option (GPLv3 or a paid commercial license, full stop) while PySide6 ships under LGPLv3 with GPL fallbacks. license-radar's SPDX OR-resolver correctly tiers them as strong-copyleft and weak-copyleft respectively — here's why, verified against both packages' live PyPI metadata.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>PyQt5 and PySide6 wrap the same Qt library under different licenses</h1>
+<p class="meta">By HiroCheck &middot; Published 2026-08-31</p>
+
+<p>Two Python packages give you the same underlying Qt widget toolkit —
+<code>PyQt5</code> and <code>PySide6</code>. Swap one for the other in a
+project and the imports barely change (<code>PyQt5.QtWidgets</code> vs.
+<code>PySide6.QtWidgets</code>). The license terms you're actually agreeing
+to do not barely change: one gives you no permissive path at all, the other
+does. A scanner that treats "it's a GUI binding for Qt" as one fact instead
+of checking each package's declared license separately will get this wrong.</p>
+
+<h2>What each package actually declares</h2>
+
+<p>Checked directly against the live PyPI JSON API for both packages:</p>
+
+<pre><code>curl -s https://pypi.org/pypi/PyQt5/json | python3 -c "import json,sys; print(json.load(sys.stdin)['info']['license'])"
+&gt; GPL v3
+
+curl -s https://pypi.org/pypi/PySide6/json | python3 -c "import json,sys; print(json.load(sys.stdin)['info']['license'])"
+&gt; LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only</code></pre>
+
+<p><code>PyQt5</code>, maintained by Riverbank Computing, is dual-licensed
+under the GPLv3 and a paid Riverbank Commercial License — and, unlike the
+Qt library it wraps, <strong>PyQt has never offered an LGPL option</strong>.
+If your use case is incompatible with the GPL (closed-source distribution
+without releasing your own source), the only path is buying a commercial
+license from Riverbank; there is no free permissive tier to fall back to.</p>
+
+<p><code>PySide6</code> — the Qt Company's own official binding, sometimes
+called "Qt for Python" — is offered under the LGPLv3, with GPLv2/GPLv3 as
+alternate terms, plus a separate commercial edition from the Qt Company
+itself. The LGPL option is what makes PySide6 usable in proprietary
+applications without a commercial license, as long as you dynamically link
+against Qt rather than statically bundling it.</p>
+
+<h2>How license-radar resolves the PySide6 expression</h2>
+
+<p>PySide6's declared license isn't a single SPDX id, it's a three-way
+<code>OR</code> expression. license-radar's SPDX-expression resolver
+(<code>license_radar/spdx_expr.py</code>) treats an <code>OR</code> as "the
+licensee may satisfy either side," so the effective obligation is the
+<strong>least</strong> restrictive operand — here, LGPL-3.0-only beats both
+GPL alternatives. Verified against the shipped code:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar.classify import classify_expression
+&gt;&gt;&gt; classify_expression("GPL-3.0-only")
+'strong-copyleft'
+&gt;&gt;&gt; classify_expression("LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only")
+'weak-copyleft'</code></pre>
+
+<p><code>PyQt5</code>'s <code>GPL v3</code> string has no <code>OR</code> to
+resolve — it's a single strong-copyleft license, full stop, so it lands
+directly in the <code>strong-copyleft</code> tier without ever reaching the
+expression parser.</p>
+
+<h2>What an actual scan reports</h2>
+
+<p>Running the CLI against a <code>requirements.txt</code> listing both
+packages side by side:</p>
+
+<pre><code>$ cat requirements.txt
+pyqt5
+pyside6
+requests
+
+$ license-radar scan requirements.txt
+[pypi] pyqt5: GPL-3.0-only (strong-copyleft) !!
+[pypi] pyside6: LGPL-3.0-only (weak-copyleft)
+[pypi] requests: Apache-2.0 (permissive)
+
+VIOLATIONS FOUND</code></pre>
+
+<p>Under license-radar's default policy (fail at strong-copyleft or above),
+<code>pyqt5</code> trips the scan; <code>pyside6</code> and
+<code>requests</code> don't. That's not a coin flip or a name-based guess —
+it's the direct, mechanical consequence of one package declaring a bare
+GPLv3 and the other declaring an <code>OR</code> expression with an LGPL
+branch. <code>pyqt5</code> is in fact license-radar's own canonical
+strong-copyleft fixture used across its test suite, precisely because the
+GPL-only, no-LGPL-option case is real and common enough to be the
+reference example.</p>
+
+<h2>Why "just use PySide instead" isn't a free pass either</h2>
+
+<p>The LGPL still carries obligations PyQt5's GPL doesn't even offer a way
+around: dynamic linking (not static), and giving users the means to relink
+against a modified version of the LGPL'd library. Static-linking PySide6
+into a frozen executable (PyInstaller, Nuitka, a single-file build) can
+forfeit the LGPL path and pull you back toward the GPL branch of the same
+<code>OR</code> expression — at which point PySide6 is no more permissive
+for that build than PyQt5 is. license-radar's <code>weak-copyleft</code>
+tier is a real compliance obligation, not a "safe" label; it just isn't
+the strong-copyleft, no-permissive-alternative case that PyQt5 is.</p>
+
+<h2>What to actually check</h2>
+
+<p>If a project needs Qt bindings and closed-source distribution without a
+paid license, PySide6's LGPL branch is the one that can work — provided
+the build actually links dynamically. If it needs to statically bundle Qt,
+neither package's default terms give a free path, and the real options are
+a Riverbank commercial license (PyQt) or a Qt Company commercial license
+(PySide), not a license-radar-detectable technicality. Either way, checking
+which package a project actually imports — and how it's built, not just
+what it imports — is the question a dependency-manifest scan can start
+answering but can't finish on its own.</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs &rarr;</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

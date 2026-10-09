@@ -29,8 +29,21 @@ def scan_manifest(path: Path, online: bool = False) -> list[Finding]:
     return findings
 
 
-def scan_path(root: Path, online: bool = False) -> list[Finding]:
-    findings = []
-    for manifest in discover_manifests(root):
+def scan_path_detailed(
+    root: Path, online: bool = False
+) -> tuple[list[Finding], list[Path]]:
+    """Scan ``root`` and return both the findings and the manifests audited.
+
+    Returning the manifest list alongside the findings lets callers (e.g. the
+    Pro report) state exactly which files the audit covered, without walking
+    the tree a second time.
+    """
+    manifests = discover_manifests(root)
+    findings: list[Finding] = []
+    for manifest in manifests:
         findings.extend(scan_manifest(manifest, online=online))
-    return findings
+    return findings, manifests
+
+
+def scan_path(root: Path, online: bool = False) -> list[Finding]:
+    return scan_path_detailed(root, online=online)[0]

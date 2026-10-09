@@ -49,6 +49,8 @@ def test_compound_reduction_entries_keep_their_verified_tier():
         "pycurl": TIER_PERMISSIVE,            # LGPL-2.1-only OR MIT
         "asyncssh": TIER_WEAK_COPYLEFT,       # EPL-2.0 OR GPL-2.0-or-later
         "pygobject": TIER_WEAK_COPYLEFT,      # LGPLv2+ classifier
+        "dulwich": TIER_PERMISSIVE,           # Apache-2.0 OR GPL-2.0-or-later -> Apache-2.0
+        "paho-mqtt": TIER_PERMISSIVE,         # EPL-2.0 OR BSD-3-Clause -> BSD-3-Clause
     }
     for name, tier in expected.items():
         assert name in PYPI_LICENSES, f"{name} missing from DB"

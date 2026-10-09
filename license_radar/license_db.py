@@ -166,6 +166,47 @@ PYPI_LICENSES = {
     "pycurl": "MIT",  # license_expression "LGPL-2.1-only OR MIT"; OR->least = MIT (licensee may choose MIT)
     "asyncssh": "EPL-2.0",  # license_expression "EPL-2.0 OR GPL-2.0-or-later"; OR->least = EPL-2.0
     "pygobject": "LGPL-2.1-or-later",  # classifier "GNU Lesser General Public License v2 or later (LGPLv2+)"
+    # Coverage expansion verified live against the PyPI JSON API (2026-08-02).
+    # Each stored id is transcribed from the registry's own metadata, following
+    # the shipping scanner's priority (license_expression -> a License classifier
+    # we map -> the free-text license field); the source field and the resulting
+    # compliance tier are noted per line. OR-expressions are stored verbatim and
+    # reduced by classify_expression at scan time (OR -> least restrictive
+    # available option). Popular strong-copyleft tools (ansible, mercurial) were
+    # previously reported "unknown"; they are now correctly flagged.
+    "ansible": "GPL-3.0-or-later",  # license field; strong-copyleft
+    "ansible-core": "GPL-3.0-or-later",  # license_expression; strong-copyleft
+    "mercurial": "GPL-2.0-or-later",  # license_expression; strong-copyleft
+    "dulwich": "Apache-2.0",  # license_expression "Apache-2.0 OR GPL-2.0-or-later"; OR->least = Apache-2.0
+    "paho-mqtt": "BSD-3-Clause",  # license "EPL-2.0 OR BSD-3-Clause"; OR->least = BSD-3-Clause
+    "pymysql": "MIT",  # license_expression; permissive
+    "pexpect": "ISC",  # classifier 'ISC License (ISCL)'; permissive
+    "ptyprocess": "ISC",  # classifier 'ISC License (ISCL)'; permissive
+    "cython": "Apache-2.0",  # license field; permissive
+    "wrapt": "BSD-2-Clause",  # license_expression; permissive
+    "future": "MIT",  # classifier 'MIT License'; permissive
+    "pyopenssl": "Apache-2.0",  # classifier 'Apache Software License'; permissive
+    "websocket-client": "Apache-2.0",  # classifier 'Apache Software License'; permissive
+    "humanize": "MIT",  # license_expression; permissive
+    "pyasn1": "BSD-2-Clause",  # license field; permissive
+    "rsa": "Apache-2.0",  # classifier 'Apache Software License'; permissive
+    "oauthlib": "BSD-3-Clause",  # license field; permissive
+    "requests-oauthlib": "ISC",  # license field; permissive
+    "google-auth": "Apache-2.0",  # classifier 'Apache Software License'; permissive
+    "importlib-metadata": "Apache-2.0",  # license_expression; permissive
+    "kombu": "BSD-3-Clause",  # license field; permissive
+    "setuptools-scm": "MIT",  # license field; permissive
+    "hatchling": "MIT",  # license_expression; permissive
+    "flit-core": "BSD-3-Clause",  # license_expression; permissive
+    "build": "MIT",  # license_expression; permissive
+    "twine": "Apache-2.0",  # license_expression; permissive
+    "pkginfo": "MIT",  # classifier 'MIT License'; permissive
+    "decorator": "BSD-2-Clause",  # license field; permissive
+    "toml": "MIT",  # classifier 'MIT License'; permissive
+    "cloudpickle": "BSD-3-Clause",  # license field; permissive
+    "threadpoolctl": "BSD-3-Clause",  # license field; permissive
+    "pytest-cov": "MIT",  # license_expression; permissive
+    "faker": "MIT",  # classifier 'MIT License'; permissive
     # synthetic fixtures (not a claim about any real package)
     "test-strong-copyleft-pkg": "AGPL-3.0-only",
     "test-weak-copyleft-pkg": "MPL-2.0",
@@ -281,6 +322,51 @@ NPM_LICENSES = {
     "three": "MIT",
     "d3": "ISC",
     "nodemailer": "MIT-0",
+    # Coverage expansion verified live against the npm registry (2026-08-02).
+    # Each id is transcribed from the registry document's declared license
+    # (latest dist-tag). All resolve to the permissive tier -- consistent with
+    # the reality that copyleft is rare in the npm ecosystem -- so these reduce
+    # false "unknown" noise on real Node projects rather than adding new flags.
+    "typeorm": "MIT",  # npm registry license; permissive
+    "prisma": "Apache-2.0",  # npm registry license; permissive
+    "ethers": "MIT",  # npm registry license; permissive
+    "passport": "MIT",  # npm registry license; permissive
+    "multer": "MIT",  # npm registry license; permissive
+    "sharp": "Apache-2.0",  # npm registry license; permissive
+    "bull": "MIT",  # npm registry license; permissive
+    "ioredis": "MIT",  # npm registry license; permissive
+    "redis": "MIT",  # npm registry license; permissive
+    "mysql2": "MIT",  # npm registry license; permissive
+    "class-validator": "MIT",  # npm registry license; permissive
+    "class-transformer": "MIT",  # npm registry license; permissive
+    "@nestjs/core": "MIT",  # npm registry license; permissive
+    "fastify": "MIT",  # npm registry license; permissive
+    "koa": "MIT",  # npm registry license; permissive
+    "got": "MIT",  # npm registry license; permissive
+    "undici": "MIT",  # npm registry license; permissive
+    "cheerio": "MIT",  # npm registry license; permissive
+    "jsdom": "MIT",  # npm registry license; permissive
+    "marked": "MIT",  # npm registry license; permissive
+    "highlight.js": "BSD-3-Clause",  # npm registry license; permissive
+    "moment-timezone": "MIT",  # npm registry license; permissive
+    "electron": "MIT",  # npm registry license; permissive
+    "canvas": "MIT",  # npm registry license; permissive
+    "node-gyp": "MIT",  # npm registry license; permissive
+    "husky": "MIT",  # npm registry license; permissive
+    "lint-staged": "MIT",  # npm registry license; permissive
+    "@angular/core": "MIT",  # npm registry license; permissive
+    "typescript-eslint": "MIT",  # npm registry license; permissive
+    "zone.js": "MIT",  # npm registry license; permissive
+    "fbjs": "MIT",  # npm registry license; permissive
+    "react-native": "MIT",  # npm registry license; permissive
+    "@types/node": "MIT",  # npm registry license; permissive
+    "date-fns-tz": "MIT",  # npm registry license; permissive
+    "validator": "MIT",  # npm registry license; permissive
+    "bcryptjs": "BSD-3-Clause",  # npm registry license; permissive
+    "dotenv-expand": "BSD-3-Clause",  # npm registry license; permissive
+    "pako": "MIT",  # npm registry license "(MIT AND Zlib)"; AND of two permissive terms -> permissive
+    "xml2js": "MIT",  # npm registry license; permissive
+    "fast-xml-parser": "MIT",  # npm registry license; permissive
     # synthetic fixtures (not a claim about any real package)
     "test-strong-copyleft-pkg": "GPL-3.0-only",
     "test-weak-copyleft-pkg": "LGPL-3.0-only",

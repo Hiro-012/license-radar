@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>license-radar scans Python and npm manifests. A Go or Conda-only repo gets "OK — no policy violations" too — license-radar</title>
+<meta name="description" content="license-radar recognizes requirements.txt, pyproject.toml, setup.py, setup.cfg, Pipfile, and package.json — and only those. Point it at a directory with none of them (a Go service, a Conda-only ML project) and it prints 'No dependencies found' followed by 'OK — no policy violations', exit code 0: the same output, and the same green CI check, as a repo that was actually scanned clean.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>license-radar scans Python and npm manifests. A Go or Conda-only repo gets "OK — no policy violations" too</h1>
+<p class="meta">By HiroCheck · Published 2026-09-18</p>
+
+<p>license-radar's README is upfront about what it scans:
+<code>requirements.txt</code>, <code>pyproject.toml</code>,
+<code>setup.py</code>, <code>setup.cfg</code>, <code>Pipfile</code>, and
+<code>package.json</code>. That is Python and npm only — by design, not
+an oversight. What isn't documented anywhere is what happens when a scan
+target has <em>none</em> of those files: a Go service (<code>go.mod</code>),
+a Rust crate (<code>Cargo.toml</code>), or a Conda-managed ML project
+(<code>environment.yml</code>) all produce the exact same terminal output
+and exit code as a project that was fully scanned and found clean.</p>
+
+<h2>The matching rule, as implemented</h2>
+
+<pre><code># license_radar/parsers.py
+def _matches_manifest(name: str) -> tuple[str, object] | None:
+    if name == "pyproject.toml":
+        return "pypi", parse_pyproject_toml
+    if name == "package.json":
+        return "npm", parse_package_json
+    if name == "setup.cfg":
+        return "pypi", parse_setup_cfg
+    if name == "setup.py":
+        return "pypi", parse_setup_py
+    if name == "Pipfile":
+        return "pypi", parse_pipfile
+    if name.startswith("requirements") and name.endswith(".txt"):
+        return "pypi", parse_requirements_txt
+    return None</code></pre>
+
+<p>Six exact patterns, all Python or npm. A directory walk that finds
+none of them returns an empty manifest list — there is no separate
+"nothing to scan here" signal from that point on. It flows into the same
+empty-findings path as a directory whose one <code>requirements.txt</code>
+happened to list only permissively-licensed packages.</p>
+
+<h2>Reproduced against the unmodified CLI</h2>
+
+<p>A minimal Go module, with nothing else in the directory:</p>
+
+<pre><code>$ cat go.mod
+module example.com/foo
+
+go 1.21
+
+require github.com/gpl-licensed/somepkg v1.0.0
+
+$ license-radar scan .
+No dependencies found.
+
+OK — no policy violations
+$ echo $?
+0</code></pre>
+
+<p>The same for a Conda-managed ML project declaring its dependencies in
+<code>environment.yml</code> instead of a <code>pyproject.toml</code> or
+<code>requirements.txt</code> — common in data-science and model-training
+repos that need GPU/CUDA packages a pure-pip install can't provide:</p>
+
+<pre><code>$ cat environment.yml
+name: myenv
+dependencies:
+  - python=3.11
+  - some-gpl-package
+
+$ license-radar scan .
+No dependencies found.
+
+OK — no policy violations
+$ echo $?
+0</code></pre>
+
+<p>Both commands were run against this session's unmodified checkout, no
+code changed. The <code>--json</code> output carries the same ambiguity
+in machine-readable form — a CI step parsing this has no field to
+distinguish "scanned, zero violations" from "scanned nothing":</p>
+
+<pre><code>$ license-radar scan . --json
+{
+  "findings": [],
+  "violation": false
+}</code></pre>
+
+<h2>Why "OK" and "nothing was scanned" look identical on purpose</h2>
+
+<p>This isn't a parsing bug in any of the six recognized formats — every
+existing article on this blog about license-radar's manifest discovery
+(the <code>dev-requirements.txt</code> naming gap, for instance) is about
+a file that <em>should</em> have been read and wasn't. This is different:
+the tool is working exactly as documented, on a project type it never
+claimed to support. The problem is narrower and easy to miss for exactly
+that reason — <code>run_scan()</code> in <code>license_radar/cli.py</code>
+has one branch for "no findings," and it's the same branch whether that's
+because zero manifests exist or because every manifest that does exist
+declares only permissive licenses:</p>
+
+<pre><code># license_radar/cli.py
+    if args.json:
+        print(json.dumps({"findings": rows, "violation": has_violation}, indent=2))
+    else:
+        if not rows:
+            print("No dependencies found.")
+        for row in rows:
+            ...
+        print()
+        print("VIOLATIONS FOUND" if has_violation else "OK — no policy violations")
+
+    return EXIT_VIOLATION if has_violation else EXIT_OK</code></pre>
+
+<p><code>rows</code> being empty because <code>discover_manifests()</code>
+found nothing, versus <code>rows</code> being empty because every found
+manifest classified as <code>permissive</code>, take the same path to the
+same "OK — no policy violations" line and the same exit code 0. The
+<code>--online</code> flag changes nothing here either — it only affects
+lookups for packages already found in a manifest; with zero manifests
+found there is nothing for it to query.</p>
+
+<h2>Where this actually bites</h2>
+
+<p>The pre-commit hook config in license-radar's own README scopes itself
+correctly — it only runs when a commit touches one of the six recognized
+filenames, so it never has this problem. The gap shows up one level up,
+in a generic CI job that runs <code>license-radar scan .</code> across an
+entire repository and treats a non-zero exit code as the only signal that
+matters (a pattern this project's own <code>gpl-trove-classifier-text-reads-as-unknown.html</code>
+piece already showed is common for compliance gates). That pattern is
+exactly where "OK" and "nothing was scanned" needing to be
+distinguishable matters most: a polyglot monorepo where one service is
+Python (correctly scanned) sitting next to a Go or Rust service (silently
+zero-scanned) will show a single green <code>license-radar scan .</code>
+step covering "this repo," when it only ever covered the Python/npm
+slice of it. A team that adds the Go service after wiring up the CI step
+gets no signal that its coverage just changed.</p>
+
+<h2>Verification</h2>
+
+<pre><code>$ python3 -m pytest tests -q
+121 passed
+
+$ python3 scripts/measure_accuracy.py
+  packages (ground truth): 305  (scanned end-to-end: 305)
+  risky packages       : 13  flagged: 13
+  recall               : 100.00%
+  false-positive rate  : 0.00%</code></pre>
+
+<p>No code was changed this session — both commands were run against the
+existing, unmodified checkout, and the 121/121 and 100%/0% figures match
+the numbers already published in the README's "Detection accuracy"
+section (this finding doesn't touch classification, so it doesn't move
+them). The two reproductions above (<code>go.mod</code>,
+<code>environment.yml</code>) were run directly against
+<code>license_radar.cli.main</code> in temporary directories created and
+deleted within this session; neither is a real published package, so no
+external license claim is being made about either — the point is the
+CLI's output, not any specific Go or Conda package's actual license.</p>
+
+<p>A CI job that wants an honest signal today can check <code>rows</code>
+(or the JSON <code>findings</code> array) length independently of
+<code>violation</code>/exit code, or run <code>license-radar scan . --json</code>
+and compare the manifest count it expects for that repo against what
+came back — nothing in the CLI currently does that comparison for you.</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

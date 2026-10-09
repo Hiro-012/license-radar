@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>license-radar says "redis" is MIT. The Redis server hasn't been under one license since 2024 — license-radar</title>
+<meta name="description" content="pip install redis / npm install redis both report MIT, correctly — that's the client library. The Redis database itself has changed license three times since 2024 (BSD to SSPL/RSALv2 to a tri-license including AGPLv3), and no dependency-manifest scanner can see that.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1a1a1a; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  .meta { color: #777; font-size: 0.9rem; margin-top: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  pre { background: #f4f4f4; padding: 0.9rem 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+  .cta { display: inline-block; margin-top: 0.5rem; padding: 0.6rem 1.1rem; background: #1a1a1a; color: #fff; text-decoration: none; border-radius: 6px; }
+  .cta:hover { background: #333; }
+  footer { margin-top: 3rem; color: #777; font-size: 0.9rem; }
+  a { color: #1a1a1a; }
+</style>
+</head>
+<body>
+<h1>license-radar says "redis" is MIT. The Redis server hasn't been under one license since 2024</h1>
+<p class="meta">By HiroCheck · Published 2026-08-21</p>
+
+<p>Run <code>license-radar scan</code> on a project that lists <code>redis</code>
+in <code>requirements.txt</code> (or <code>ioredis</code> in
+<code>package.json</code>), and it reports <code>MIT</code>, permissive, no
+violation. That answer is correct — and also easy to misread as saying
+something it doesn't say.</p>
+
+<h2>What the scanner is actually looking at</h2>
+
+<p><code>redis</code> on PyPI and <code>ioredis</code> on npm are
+<strong>client libraries</strong> — the code your application imports to
+talk to a Redis server over its wire protocol. Checked directly against the
+live registries:</p>
+
+<pre><code>curl -s https://pypi.org/pypi/redis/json | grep -i "License ::"
+&gt; License :: OSI Approved :: MIT License
+
+curl -s https://registry.npmjs.org/ioredis/latest | grep '"license"'
+&gt; "license": "MIT"</code></pre>
+
+<p>Both are MIT, and that's the license of the client code that ships in
+your dependency tree. license-radar's offline database has fixed entries
+for both (<code>redis</code> and <code>ioredis</code> → <code>MIT</code>),
+which resolve to the <code>permissive</code> tier — verified directly
+against the shipped database:</p>
+
+<pre><code>&gt;&gt;&gt; from license_radar import license_db, classify
+&gt;&gt;&gt; license_db.PYPI_LICENSES["redis"]
+'MIT'
+&gt;&gt;&gt; classify.classify_license("MIT")
+'permissive'</code></pre>
+
+<h2>What it isn't looking at</h2>
+
+<p>The Redis <em>server</em> — the actual database binary your app connects
+to — is a completely separate piece of software with its own, much more
+turbulent license history:</p>
+
+<table>
+  <tr><th>Redis version</th><td>License</td></tr>
+  <tr><td>&le; 7.2</td><td><code>BSD-3-Clause</code> (permissive)</td></tr>
+  <tr><td>7.4 (March 2024)</td><td>Dual <code>SSPLv1</code> / <code>RSALv2</code> — source-available, not OSI-approved, not permissive</td></tr>
+  <tr><td>8.0+ (May 2025)</td><td>Tri-licensed: <code>RSALv2</code>, <code>SSPLv1</code>, or <code>AGPLv3</code> (licensee's choice) — AGPLv3 is copyleft, the other two aren't OSI open source at all</td></tr>
+</table>
+
+<p>In March 2024, Redis Ltd. moved the server off BSD to the Server Side
+Public License and its own Redis Source Available License, a change
+significant enough that AWS and Google Cloud responded by forking the
+last BSD release into Valkey. After community pushback and original author
+Salvatore Sanfilippo ("antirez") rejoining the company, Redis 8.0 added
+AGPLv3 as a third option in May 2025 — a partial reversal, not a return to
+the original permissive terms.</p>
+
+<p>None of that history touches the <code>redis</code>/<code>ioredis</code>
+client packages. They were MIT before March 2024 and they're MIT now. A
+scanner that reads <code>requirements.txt</code> or <code>package.json</code>
+has no way to know — and no reason to know, since it isn't its job — what
+license governs the separate server binary your app happens to talk to at
+runtime.</p>
+
+<h2>Why this particular gap matters more than usual</h2>
+
+<p>Most "is this dependency safe" review workflows start and end with the
+dependency manifest, because for library code that's usually the whole
+story: if you <code>pip install</code> it, you're using its code under its
+license, full stop. Redis breaks that assumption in a way a lot of other
+infrastructure software does too (Elasticsearch/OpenSearch and MongoDB have
+similar client-vs-server splits) — the manifest only ever shows the
+half of the picture that lives in your dependency tree. The half that's a
+separately-licensed binary you deploy, self-host, or consume as a managed
+service isn't a "dependency" in the sense any manifest scanner — license-radar
+included — is built to see.</p>
+
+<h2>What to actually check</h2>
+
+<p>If a project uses Redis as infrastructure (not just imports a client), the
+license question that matters is: which Redis license applies to the
+server version actually deployed, and does that license's terms (SSPL's
+service-provider clause, RSALv2's usage restrictions, or AGPLv3's copyleft
+triggers) matter for how the product is distributed or offered as a
+service. That's a deployment-and-distribution question, not a
+dependency-manifest question — check it against
+<a href="https://redis.io/legal/licenses/">Redis's own licensing page</a>
+directly rather than assuming a MIT dependency answers it.</p>
+
+<p><a href="https://pypi.org/project/license-radar/">license-radar</a> will
+correctly keep reporting the client library as MIT/permissive either way —
+that's an accurate answer to the question it's actually built to answer
+(what license governs the code in this dependency tree), not to the
+adjacent one (what license governs the infrastructure this code talks to).</p>
+
+<pre><code>pip install license-radar
+license-radar scan .</code></pre>
+
+<p><a class="cta" href="../license-radar.html">license-radar — install &amp; docs →</a></p>
+
+<footer>
+  <p>By HiroCheck. license-radar is MIT licensed. See also
+  <a href="https://github.com/Hiro-012/license-radar">license-radar on GitHub</a>
+  and <a href="./index.html">more posts</a>.</p>
+</footer>
+</body>
+</html>

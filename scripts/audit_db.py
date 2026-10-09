@@ -72,8 +72,10 @@ without a network dependency.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -99,6 +101,29 @@ from license_radar.spdx_expr import tier_of_expression  # noqa: E402,F401
 
 USER_AGENT = "license-radar-db-audit/1.0 (+https://pypi.org/project/license-radar/)"
 TIMEOUT = 20
+
+# The audit fans ~230 registry requests across a thread pool. A single flaky
+# response must not abort the whole run: before this guard a partially-read body
+# (``http.client.IncompleteRead`` -- the server/proxy closed the connection
+# mid-body) escaped ``_audit_one``'s ``except`` (it is not a ``URLError``) and
+# ``pool.map`` re-raised it, crashing every other package's result with it. The
+# audit is our only mechanical DB-drift check, so a transient network hiccup
+# silently disabling it is a real reliability hole. We now retry these transient
+# wire errors a few times, and any that still fail are caught as a single ERROR
+# row (fail-soft) rather than taking the run down.
+HTTP_RETRIES = 3          # total attempts per URL before giving up
+HTTP_BACKOFF = 0.5        # seconds; grows linearly (0.5s, 1.0s, ...) between tries
+
+# Transient failures worth retrying. Deliberately excludes ``HTTPError`` (a 404
+# means the package genuinely is not there -- retrying only hammers the registry
+# and slows the run). ``IncompleteRead``/``RemoteDisconnected`` are
+# ``HTTPException``; ``ConnectionError``/``TimeoutError`` are ``OSError``.
+_TRANSIENT_ERRORS = (
+    http.client.IncompleteRead,
+    http.client.RemoteDisconnected,
+    ConnectionError,
+    TimeoutError,
+)
 
 # Trove "License :: OSI Approved :: X" classifier tails -> SPDX id, limited to
 # ids that reduce to an unambiguous tier. Anything not listed here (e.g. a bare
@@ -150,10 +175,27 @@ _CLASSIFIER_TIER = {
 # shared by the scanner and this audit rather than duplicated here.
 
 
-def _http_json(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-        return json.load(resp)
+def _http_json(url: str, *, retries: int = HTTP_RETRIES,
+               backoff: float = HTTP_BACKOFF) -> dict:
+    """Fetch and parse JSON, retrying transient wire failures with backoff.
+
+    Reading the response body (``json.load(resp)``) can raise
+    ``http.client.IncompleteRead`` when the connection drops mid-body; that is a
+    transient hiccup, not a permanent error, so we retry it a few times before
+    letting it propagate to the caller (which records it as a single ERROR row).
+    Non-transient failures (404, malformed JSON) are raised on the first try.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                return json.load(resp)
+        except _TRANSIENT_ERRORS as exc:
+            last_exc = exc
+            if attempt + 1 < retries:
+                time.sleep(backoff * (attempt + 1))
+    raise last_exc
 
 
 def spdx_from_pypi_payload(info: dict) -> str | None:
@@ -231,7 +273,14 @@ def _audit_one(ecosystem: str, name: str, db_spdx: str) -> dict:
         else:
             payload = _http_json(f"https://registry.npmjs.org/{name}")
             reg_spdx = spdx_from_npm_payload(payload)
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as exc:
+    except (urllib.error.URLError, urllib.error.HTTPError, http.client.HTTPException,
+            OSError, ValueError) as exc:
+        # Fail-soft: one package's network/parse failure becomes a single ERROR
+        # row (printed for a human, non-fatal unless --strict) instead of an
+        # uncaught exception that pool.map would re-raise, aborting the whole
+        # audit. IncompleteRead/RemoteDisconnected are HTTPException; connection
+        # resets and timeouts are OSError -- none of which are URLError, which is
+        # why the old, narrower clause let them escape.
         return {"eco": ecosystem, "name": name, "status": "ERROR",
                 "db": db_spdx, "reg": None, "detail": str(exc)[:80]}
 
